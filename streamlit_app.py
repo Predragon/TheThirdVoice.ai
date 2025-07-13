@@ -25,7 +25,7 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 2rem;
     }
-    
+
     .feature-card {
         border: 2px solid #e0e0e0;
         border-radius: 10px;
@@ -33,7 +33,7 @@ st.markdown("""
         margin: 1rem 0;
         background: #f9f9f9;
     }
-    
+
     .ai-response {
         background: #f0f8ff;
         border-left: 4px solid #4CAF50;
@@ -41,7 +41,7 @@ st.markdown("""
         margin: 1rem 0;
         border-radius: 5px;
     }
-    
+
     .warning-box {
         background: #fff3cd;
         border-left: 4px solid #ffc107;
@@ -49,7 +49,7 @@ st.markdown("""
         margin: 1rem 0;
         border-radius: 5px;
     }
-    
+
     .emotion-card {
         background: #e8f5e8;
         border-radius: 8px;
@@ -57,7 +57,7 @@ st.markdown("""
         margin: 0.5rem 0;
         border-left: 4px solid #4CAF50;
     }
-    
+
     .sentiment-positive {
         background: #d4edda;
         color: #155724;
@@ -65,7 +65,7 @@ st.markdown("""
         border-radius: 5px;
         border-left: 4px solid #28a745;
     }
-    
+
     .sentiment-negative {
         background: #f8d7da;
         color: #721c24;
@@ -73,7 +73,7 @@ st.markdown("""
         border-radius: 5px;
         border-left: 4px solid #dc3545;
     }
-    
+
     .sentiment-neutral {
         background: #d1ecf1;
         color: #0c5460;
@@ -242,8 +242,14 @@ class GeminiMessageCoach:
 # Initialize session state
 if 'usage_count' not in st.session_state:
     st.session_state.usage_count = 0
+
+# API Key handling: Prioritize st.secrets for deployed apps
+# Only set if it's not already in session_state (e.g., from a previous manual input)
 if 'gemini_api_key' not in st.session_state:
-    st.session_state.gemini_api_key = ""
+    if "GEMINI_API_KEY" in st.secrets:
+        st.session_state.gemini_api_key = st.secrets["GEMINI_API_KEY"]
+    else:
+        st.session_state.gemini_api_key = "" # Default empty for local dev if no secrets.toml
 
 # Initialize AI Coach (using st.cache_resource for efficiency)
 @st.cache_resource
@@ -266,9 +272,9 @@ with st.expander("🔑 Configure Google Gemini API", expanded=not st.session_sta
 
     api_key_input = st.text_input(
         "Enter your Gemini API key:",
-        value=st.session_state.gemini_api_key,
+        value=st.session_state.gemini_api_key, # This will now pre-fill if loaded from secrets
         type="password",
-        help="Your API key is stored only in your browser session"
+        help="Your API key is stored only in your browser session or securely in Streamlit Cloud secrets"
     )
 
     if st.button("Save API Key"):
@@ -449,8 +455,8 @@ with tab4:
     st.markdown("## About The Third Voice")
 
     st.markdown("""
-    The Third Voice was born from a deeply personal crisis – miscommunication during detention – 
-    and emerged as a digital co-mediator to help people communicate calmly and constructively 
+    The Third Voice was born from a deeply personal crisis – miscommunication during detention –
+    and emerged as a digital co-mediator to help people communicate calmly and constructively
     in emotionally charged relationships.
     """)
 
@@ -489,14 +495,4 @@ st.markdown("© 2025 The Third Voice | Built with ❤️ and ⚡ Google Gemini |
 # Sidebar
 st.sidebar.markdown("### 📊 AI Status")
 st.sidebar.markdown(f"**API Key:** {'✅ Configured' if st.session_state.gemini_api_key else '❌ Not configured'}")
-st.sidebar.markdown(f"**Session uses:** {st.session_state.usage_count}")
-st.sidebar.markdown("**Model:** Google Gemini Flash")
-
-if st.session_state.gemini_api_key:
-    st.sidebar.success("✅ AI Ready!")
-else:
-    st.sidebar.error("❌ Configure API key")
-
-st.sidebar.markdown("### 💡 Tips")
-st.sidebar.markdown("💡 Try different contexts for better results")
-            
+st.sidebar.markdown(f"**Session use
