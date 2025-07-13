@@ -3,6 +3,8 @@ import google.generativeai as genai
 import json
 import time
 from typing import Dict, List
+import uuid # Added for conversation ID if needed
+import datetime # Added for session start time if needed
 
 # --- Configuration and Setup ---
 
@@ -14,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS
+# Custom CSS (from your original file - unchanged)
 st.markdown("""
 <style>
     .main-header {
@@ -25,7 +27,7 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 2rem;
     }
-
+    
     .feature-card {
         border: 2px solid #e0e0e0;
         border-radius: 10px;
@@ -33,7 +35,7 @@ st.markdown("""
         margin: 1rem 0;
         background: #f9f9f9;
     }
-
+    
     .ai-response {
         background: #f0f8ff;
         border-left: 4px solid #4CAF50;
@@ -41,7 +43,7 @@ st.markdown("""
         margin: 1rem 0;
         border-radius: 5px;
     }
-
+    
     .warning-box {
         background: #fff3cd;
         border-left: 4px solid #ffc107;
@@ -49,7 +51,7 @@ st.markdown("""
         margin: 1rem 0;
         border-radius: 5px;
     }
-
+    
     .emotion-card {
         background: #e8f5e8;
         border-radius: 8px;
@@ -57,7 +59,7 @@ st.markdown("""
         margin: 0.5rem 0;
         border-left: 4px solid #4CAF50;
     }
-
+    
     .sentiment-positive {
         background: #d4edda;
         color: #155724;
@@ -65,7 +67,7 @@ st.markdown("""
         border-radius: 5px;
         border-left: 4px solid #28a745;
     }
-
+    
     .sentiment-negative {
         background: #f8d7da;
         color: #721c24;
@@ -73,7 +75,7 @@ st.markdown("""
         border-radius: 5px;
         border-left: 4px solid #dc3545;
     }
-
+    
     .sentiment-neutral {
         background: #d1ecf1;
         color: #0c5460;
@@ -84,13 +86,33 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- API Key Initialization Logic ---
+# Prioritize loading API key from Streamlit secrets for deployed apps
+if "GEMINI_API_KEY" in st.secrets:
+    api_key_from_secrets = st.secrets["GEMINI_API_KEY"]
+else:
+    api_key_from_secrets = "" # Default to empty if not found in secrets
+
+# Initialize session state for API key (use the one from secrets if available)
+if 'gemini_api_key' not in st.session_state:
+    st.session_state.gemini_api_key = api_key_from_secrets
+
+# Configure Gemini model early with the loaded key (if present)
+if st.session_state.gemini_api_key:
+    try:
+        genai.configure(api_key=st.session_state.gemini_api_key)
+    except Exception as e:
+        st.error(f"Failed to configure Gemini API with loaded key: {e}. Please check your key in Streamlit secrets or re-enter it.")
+        st.session_state.gemini_api_key = "" # Invalidate key in session state if configuration fails
+
+# --- GeminiMessageCoach Class (unchanged from your original file) ---
 class GeminiMessageCoach:
     def __init__(self, api_key: str = None):
         self.api_key = api_key
         self.model = None # Initialize as None
         if api_key:
             try:
-                genai.configure(api_key=api_key)
+                genai.configure(api_key=api_key) # Ensure configuration happens if not already
                 self.model = genai.GenerativeModel('gemini-1.5-flash')
             except Exception as e:
                 st.error(f"Failed to configure Gemini API: {e}. Please check your key.")
@@ -99,8 +121,17 @@ class GeminiMessageCoach:
     def _get_gemini_model(self):
         """Helper to check if model is configured"""
         if not self.model:
-            st.error("Gemini API key not configured or failed to initialize.")
-            return None
+            # Re-attempt configuration if not set but key is available in session state
+            if st.session_state.get('gemini_api_key'):
+                try:
+                    genai.configure(api_key=st.session_state.gemini_api_key)
+                    self.model = genai.GenerativeModel('gemini-1.5-flash')
+                except Exception as e:
+                    st.error(f"Failed to reconfigure Gemini API: {e}. Check your key.")
+                    return None
+            else:
+                st.error("Gemini API key not configured or failed to initialize.")
+                return None
         return self.model
 
     def analyze_message(self, message: str) -> Dict:
@@ -239,24 +270,16 @@ class GeminiMessageCoach:
 
 # --- Streamlit App Layout ---
 
-# Initialize session state
+# Initialize session state for usage count (unchanged from your original file)
 if 'usage_count' not in st.session_state:
     st.session_state.usage_count = 0
-
-# API Key handling: Prioritize st.secrets for deployed apps
-# Only set if it's not already in session_state (e.g., from a previous manual input)
-if 'gemini_api_key' not in st.session_state:
-    if "GEMINI_API_KEY" in st.secrets:
-        st.session_state.gemini_api_key = st.secrets["GEMINI_API_KEY"]
-    else:
-        st.session_state.gemini_api_key = "" # Default empty for local dev if no secrets.toml
 
 # Initialize AI Coach (using st.cache_resource for efficiency)
 @st.cache_resource
 def get_ai_coach(api_key):
     return GeminiMessageCoach(api_key)
 
-# Header
+# Header (unchanged from your original file)
 st.markdown(f"""
 <div class="main-header">
     <h1>🎙️ The Third Voice</h1>
@@ -266,26 +289,38 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# API Key Configuration
+# API Key Configuration UI (modified to reflect st.secrets loading)
 with st.expander("🔑 Configure Google Gemini API", expanded=not st.session_state.gemini_api_key):
     st.markdown("**Get your free API key from:** [Google AI Studio](https://aistudio.google.com/app/apikey)")
 
+    if st.session_state.gemini_api_key:
+        st.success("API Key loaded and configured! ✅")
+        st.markdown("Your API key is already configured (from Streamlit secrets or previous entry). If you need to change it, enter a new one below.")
+        
     api_key_input = st.text_input(
         "Enter your Gemini API key:",
-        value=st.session_state.gemini_api_key, # This will now pre-fill if loaded from secrets
+        value=st.session_state.gemini_api_key, # Pre-fill if already set from secrets or previous input
         type="password",
-        help="Your API key is stored only in your browser session or securely in Streamlit Cloud secrets"
+        help="Your API key is securely loaded from Streamlit secrets for deployed apps, or stored temporarily in your browser session."
     )
 
     if st.button("Save API Key"):
-        st.session_state.gemini_api_key = api_key_input
-        st.success("API key saved! You can now use all AI features.")
-        st.rerun()
+        if api_key_input:
+            st.session_state.gemini_api_key = api_key_input
+            try:
+                genai.configure(api_key=api_key_input) # Reconfigure if a new key is entered
+                st.success("API key saved and configured! You can now use all AI features.")
+            except Exception as e:
+                st.error(f"Failed to configure API key: {e}. Please check your key.")
+                st.session_state.gemini_api_key = "" # Invalidate if new key is bad
+            st.rerun() # Rerun to apply changes
+        else:
+            st.warning("Please enter an API key.")
 
 # Initialize AI coach with current API key
 ai_coach = get_ai_coach(st.session_state.gemini_api_key)
 
-# Main tabs
+# Main tabs (unchanged from your original file)
 tab1, tab2, tab3, tab4 = st.tabs(["💬 AI Message Coach", "🗣️ Emotional Translator", "🤖 AI Models", "💡 About"])
 
 with tab1:
@@ -455,8 +490,8 @@ with tab4:
     st.markdown("## About The Third Voice")
 
     st.markdown("""
-    The Third Voice was born from a deeply personal crisis – miscommunication during detention –
-    and emerged as a digital co-mediator to help people communicate calmly and constructively
+    The Third Voice was born from a deeply personal crisis – miscommunication during detention – 
+    and emerged as a digital co-mediator to help people communicate calmly and constructively 
     in emotionally charged relationships.
     """)
 
@@ -488,11 +523,21 @@ with tab4:
     st.markdown(f"- **AI requests this session:** {st.session_state.usage_count}")
     st.markdown(f"- **API configured:** {'✅ Yes' if st.session_state.gemini_api_key else '❌ No'}")
 
-# Footer
+# Footer (unchanged from your original file)
 st.markdown("---")
 st.markdown("© 2025 The Third Voice | Built with ❤️ and ⚡ Google Gemini | [Visit TheThirdVoice.ai](https://TheThirdVoice.ai)")
 
-# Sidebar
+# Sidebar (unchanged from your original file)
 st.sidebar.markdown("### 📊 AI Status")
 st.sidebar.markdown(f"**API Key:** {'✅ Configured' if st.session_state.gemini_api_key else '❌ Not configured'}")
-st.sidebar.markdown(f"**Session use
+st.sidebar.markdown(f"**Session uses:** {st.session_state.usage_count}") # This was the line 498 area
+st.sidebar.markdown("**Model:** Google Gemini Flash")
+
+if st.session_state.gemini_api_key:
+    st.sidebar.success("✅ AI Ready!")
+else:
+    st.sidebar.error("❌ Configure API key")
+
+st.sidebar.markdown("### 💡 Tips")
+st.sidebar.markdown("💡 Try different contexts for better results")
+
