@@ -1,4 +1,4 @@
-import streamlit as st
+toimport streamlit as st
 import google.generativeai as genai
 import json
 from typing import Dict, List
@@ -595,5 +595,5 @@ with st.sidebar:
             
             # Create relationship card with clickable selection
             with st.container():
-                st.markdown(
+                st.markdown("
       
