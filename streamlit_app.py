@@ -395,9 +395,9 @@ class GeminiMessageCoach:
             return self._fallback_reframe(message, relationship_type)
 
     def _fallback_reframe(self, message: str, relationship_type: str) -> str:
-        reframed = message.replace("you always", "I've"
+        reframed = message.replace("you always", """I've
 
- noticed that sometimes")
+ noticed that sometimes""")
         reframed = reframed.replace("you never", "it would help if we could")
         reframed = reframed.replace("You're wrong", "I see this differently")
         reframed = reframed.replace("That's stupid", "I don't understand that approach")
