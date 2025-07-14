@@ -2,7 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 import json
 from typing import Dict
-import uuid
 import datetime
 
 # --- Beta Tester Token Validation ---
@@ -243,7 +242,6 @@ st.sidebar.info("Welcome to The Third Voice beta! Analyze messages, save history
 # --- Tabs ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["💬 AI Message Coach", "🗣️ Emotional Translator", "🤖 AI Models", "💡 About", "📜 History"])
 
-
 with tab1:
     st.markdown("### AI-Powered Message Coaching")
     if not st.session_state.gemini_api_key:
@@ -304,11 +302,6 @@ with tab1:
                         st.code(reframed, language="text")
             else:
                 st.warning("Please enter a message to analyze.")
-
-
-
-
-
 
 with tab2:
     st.markdown("### AI Emotional Translation")
@@ -396,4 +389,53 @@ with tab5:
             context = st.selectbox("Context:", ["general", "romantic", "coparenting", "workplace"], index=["general", "romantic", "coparenting", "workplace"].index(selected_entry['context']) if selected_entry['context'] in ["general", "romantic", "coparenting", "workplace"] else 0)
             if st.button("⚡ Analyze & Reframe Reply", type="primary"):
                 if new_message.strip():
-                    with st:
+                    with st.spinner("⚡ AI is analyzing your reply..."):
+                        st.session_state.usage_count += 1
+                        # Use selected conversation as context for AI
+                        history_context = f"Previous conversation: {selected_entry['original']} -> {selected_entry['reframed']}"
+                        analysis_result = ai_coach.analyze_message(new_message, history_context)
+                        reframed = ai_coach.reframe_message(new_message, context, history_context)
+                        # Save new message to history
+                        st.session_state.history.append({
+                            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "original": new_message,
+                            "context": context,
+                            "sentiment": analysis_result.get("sentiment", "neutral"),
+                            "reframed": reframed
+                        })
+                        st.markdown("#### ✨ AI Analysis & Reframe")
+                        if analysis_result.get("success"):
+                            st.markdown(f"**Sentiment:** {analysis_result['sentiment'].title()} ({analysis_result['confidence']:.1%} confidence)")
+                            st.markdown(f"**Primary emotion:** {analysis_result.get('primary_emotion', 'mixed').title()}")
+                            if tone := analysis_result.get("tone"):
+                                st.markdown(f"**Tone:** {tone}")
+                            if triggers := analysis_result.get("potential_triggers", []):
+                                st.markdown("**Potential triggers:**")
+                                for trigger in triggers:
+                                    st.markdown(f"• {trigger}")
+                        else:
+                            st.error(f"Analysis failed: {analysis_result.get('error', 'Unknown error')}")
+                        st.markdown(f"**Reframed:** {reframed}")
+                        st.code(reframed, language="text")
+        else:
+            # Show all conversations if none selected
+            for entry in history_data:
+                st.markdown(f"**[{entry['timestamp']}] {entry['context']}**")
+                st.markdown(f"**Original:** {entry['original']}")
+                st.markdown(f"**Sentiment:** {entry['sentiment'].title()}")
+                st.markdown(f"**Reframed:** {entry['reframed']}")
+                st.markdown("---")
+    
+    else:
+        st.info("No conversation history yet. Analyze a message to start!")
+    
+    # Download button for local storage
+    import json
+    history_json = json.dumps(st.session_state.history, indent=2)
+    st.download_button(
+        label="📥 Save History to Your Device",
+        data=history_json,
+        file_name=f"third_voice_history_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
+        mime="application/json",
+        help="Downloads your conversation history to your phone or computer’s Downloads folder for privacy."
+    )
