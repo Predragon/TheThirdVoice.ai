@@ -1,13 +1,8 @@
 import streamlit as st
 import google.generativeai as genai
 
-# --- Page Config ---
-st.set_page_config(
-    page_title="The Third Voice",
-    page_icon="🎙️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# --- Page Setup ---
+st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wide", initial_sidebar_state="expanded")
 
 # --- Custom Styling ---
 st.markdown("""
@@ -38,6 +33,12 @@ genai.configure(api_key=api_key)
 # --- Gemini Setup ---
 model = genai.GenerativeModel("gemini-1.5-flash")
 
+# --- Session State Setup for History ---
+if "rewrite_history" not in st.session_state:
+    st.session_state.rewrite_history = []
+if "translation_history" not in st.session_state:
+    st.session_state.translation_history = []
+
 # --- App Header ---
 st.markdown("""
 <div class="main-header">
@@ -65,11 +66,20 @@ with tab1:
             """
             try:
                 response = model.generate_content(prompt)
+                improved = response.text.strip()
+                st.session_state.rewrite_history.append(improved)
                 st.markdown("**Suggested Version:**")
-                st.markdown(f'<div class="ai-response">{response.text.strip()}</div>', unsafe_allow_html=True)
-                st.code(response.text.strip())
+                st.markdown(f'<div class="ai-response">{improved}</div>', unsafe_allow_html=True)
+                st.code(improved)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
+
+    if st.session_state.rewrite_history:
+        st.markdown("#### 🧾 Your Session Rewrite History:")
+        for i, msg in enumerate(st.session_state.rewrite_history[::-1], 1):
+            st.markdown(f'<div class="ai-response"><b>{i}.</b> {msg}</div>', unsafe_allow_html=True)
+        if st.button("🗑️ Clear Rewrite History"):
+            st.session_state.rewrite_history.clear()
 
 # --- Tab 2: Emotional Translator ---
 with tab2:
@@ -88,9 +98,18 @@ with tab2:
             """
             try:
                 response = model.generate_content(prompt)
-                st.markdown(f'<div class="ai-response">{response.text.strip()}</div>', unsafe_allow_html=True)
+                insight = response.text.strip()
+                st.session_state.translation_history.append(insight)
+                st.markdown(f'<div class="ai-response">{insight}</div>', unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
+
+    if st.session_state.translation_history:
+        st.markdown("#### 🧾 Your Session Emotional Insights:")
+        for i, msg in enumerate(st.session_state.translation_history[::-1], 1):
+            st.markdown(f'<div class="ai-response"><b>{i}.</b> {msg}</div>', unsafe_allow_html=True)
+        if st.button("🗑️ Clear Translation History"):
+            st.session_state.translation_history.clear()
 
 # --- Footer ---
 st.caption("© 2025 The Third Voice | Built with 💜 in detention by Predrag Mirkovic")
