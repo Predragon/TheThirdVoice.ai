@@ -591,7 +591,5 @@ with st.sidebar:
             
             is_selected = st.session_state.selected_relationship == rel_id
             
-            # Create relationship card with clickable selection
-            with st.container():
-                st.markdown("
+            # Create relationship card with clickable selectio with st.container(): st.markdown(
       
