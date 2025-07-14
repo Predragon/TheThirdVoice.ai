@@ -243,6 +243,7 @@ st.sidebar.info("Welcome to The Third Voice beta! Analyze messages, save history
 # --- Tabs ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["💬 AI Message Coach", "🗣️ Emotional Translator", "🤖 AI Models", "💡 About", "📜 History"])
 
+
 with tab1:
     st.markdown("### AI-Powered Message Coaching")
     if not st.session_state.gemini_api_key:
@@ -303,6 +304,11 @@ with tab1:
                         st.code(reframed, language="text")
             else:
                 st.warning("Please enter a message to analyze.")
+
+
+
+
+
 
 with tab2:
     st.markdown("### AI Emotional Translation")
