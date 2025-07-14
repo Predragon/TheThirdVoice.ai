@@ -1,6 +1,6 @@
 st.set_page_config( page_title="The Third Voice", page_icon="🎙️", layout="wide", initial_sidebar_state="expanded" )
 
---- Custom Styling ---
+#--- Custom Styling ---
 
 st.markdown("""
 
@@ -23,15 +23,15 @@ st.markdown("""
 }
 </style>""", unsafe_allow_html=True)
 
---- Load API Key from Streamlit Secrets ---
+#--- Load API Key from Streamlit Secrets ---
 
 api_key = st.secrets.get("GEMINI_API_KEY") genai.configure(api_key=api_key)
 
---- Gemini Setup ---
+#--- Gemini Setup ---
 
 model = genai.GenerativeModel("gemini-1.5-flash")
 
---- App Header ---
+#--- App Header ---
 
 st.markdown("""
 
@@ -63,7 +63,7 @@ if st.button("💡 Analyze and Suggest Rewrite") and message_input.strip():
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
---- Tab 2: Emotional Translator ---
+#--- Tab 2: Emotional Translator ---
 
 with tab2: st.markdown("### Paste a received message to understand its emotional subtext.") received_input = st.text_area("📨 Message you received:", height=120)
 
@@ -83,7 +83,7 @@ if st.button("🔍 Translate Emotional Meaning") and received_input.strip():
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
---- Footer ---
+#--- Footer ---
 
 st.caption("© 2025 The Third Voice | Built with 💜 in detention by Predrag Mirkovic")
 
