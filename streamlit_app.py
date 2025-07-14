@@ -64,8 +64,8 @@ if not api_key_loaded:
                     st.error(f"❌ Failed to validate API key: {e}")
             else:
                 st.warning("⚠️ Please enter a valid API key.")
-else:
-    st.success("✅ Gemini API key loaded successfully (from secrets or saved session).")
+# else:
+   # st.success("✅ Gemini API key loaded successfully (from secrets or saved session).")
 
 # --- GeminiMessageCoach Class ---
 class GeminiMessageCoach:
