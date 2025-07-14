@@ -396,4 +396,4 @@ with tab5:
             context = st.selectbox("Context:", ["general", "romantic", "coparenting", "workplace"], index=["general", "romantic", "coparenting", "workplace"].index(selected_entry['context']) if selected_entry['context'] in ["general", "romantic", "coparenting", "workplace"] else 0)
             if st.button("⚡ Analyze & Reframe Reply", type="primary"):
                 if new_message.strip():
-                    with st
+                    with st:
