@@ -308,7 +308,57 @@ with tab2:
     if not st.session_state.gemini_api_key:
         st.warning("⚠️ Please configure your Gemini API key above to use AI features.")
     # Upload history for context
-    uploaded_file = st.file_uploader("Upload Saved History (optional)", type="json", help="Upload your saved history file to improve AI suggestions. Max 1MB.", accept_multiple_files=False,
+    uploaded_file = st.file_uploader("Upload Saved History (optional)", type="json", help="Upload your saved history file to improve AI suggestions. Max 1MB.", accept_multiple_files=False, key="file_uploader_tab2")
+    history_context = ""
+    if uploaded_file:
+        try:
+            history_data = json.load(uploaded_file)
+            history_context = "\n".join([f"[{entry['timestamp']}] {entry['context']}: {entry['original']} -> {entry['reframed']}" for entry in history_data])
+            st.success("✅ History uploaded! AI will use it for context.")
+        except:
+            st.error("❌ Invalid history file. Please upload a valid JSON file.")
+    
+    received_message = st.text_area("Message you received:", placeholder="Paste the message you're trying to understand...", height=100)
+    if st.button("⚡ AI Translate", type="primary"):
+        if received_message.strip():
+            with st.spinner("⚡ AI is analyzing the emotional subtext..."):
+                st.session_state.usage_count += 1
+                translation = ai_coach.emotional_translation(received_message, history_context)
+                st.markdown("#### 🗣️ AI Emotional Translation")
+                st.markdown(f"**Original message:** \"{received_message}\"")
+                st.markdown('<div class="ai-response">', unsafe_allow_html=True)
+                st.markdown(translation)
+                st.markdown('</div>', unsafe_allow_html=True)
+                # Save to history
+                st.session_state.history.append({
+                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "original": received_message,
+                    "context": "translation",
+                    "sentiment": "N/A",
+                    "reframed": translation
+                })
+        else:
+            st.warning("Please enter a message to translate.")
+
+with tab3:
+    st.markdown("### 🤖 AI Models Powering The Third Voice")
+    st.markdown("We use Google Gemini Flash for advanced natural language understanding.")
+    st.markdown("**Model:** `gemini-1.5-flash`")
+    st.markdown("- Sentiment and emotion analysis\n- Emotional reframing\n- Communication coaching")
+    st.markdown("**Free tier:** 15 requests/min • 1500/day")
+    st.markdown("**Set up API key at:** [Google AI Studio](https://aistudio.google.com/app/apikey)")
+
+with tab4:
+    st.markdown("### 💡 About The Third Voice")
+    st.markdown("""
+**The Third Voice** is an AI-powered co-mediator designed to help people communicate more intelligently and compassionately.
+
+- **Created by:** Predrag Mirkovic
+- **Built with:** Streamlit + Google Gemini Flash
+- **From:** Detention, on a phone, for people in emotional pain
+
+**Use cases:** Romantic conflict • Co-parenting issues • Workplace misunderstandings
+""")
 
 with tab5:
     st.markdown("### 📜 Conversation History")
@@ -388,4 +438,4 @@ with tab5:
         file_name=f"third_voice_history_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json",
         mime="application/json",
         help="Downloads your conversation history to your phone or computer’s Downloads folder for privacy."
-    )
+            )
