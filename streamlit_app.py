@@ -592,4 +592,85 @@ def render_navigation_controls():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col1:
-        if st.button("⬅️ Previous", key="prev_btn", disabled=st.session_state.current_tab == 0)
+        if st.button("⬅️ Previous", key="prev_btn", disabled=st.session_state.current_tab == 0):
+            st.session_state.current_tab = max(0, st.session_state.current_tab - 1)
+            st.rerun()
+    
+    with col2:
+        # Swipe indicators
+        st.markdown("""
+        <div style="text-align: center; margin: 10px 0;">
+            <div class="swipe-indicator">
+                <div class="swipe-dot {}"></div>
+                <div class="swipe-dot {}"></div>
+                <div class="swipe-dot {}"></div>
+            </div>
+        </div>
+        """.format(
+            "active" if st.session_state.current_tab == 0 else "",
+            "active" if st.session_state.current_tab == 1 else "",
+            "active" if st.session_state.current_tab == 2 else ""
+        ), unsafe_allow_html=True)
+        
+        st.markdown('<div class="touch-hint">👆 Swipe or drag to navigate between tabs</div>', 
+                   unsafe_allow_html=True)
+    
+    with col3:
+        if st.button("Next ➡️", key="next_btn", disabled=st.session_state.current_tab == 2):
+            st.session_state.current_tab = min(2, st.session_state.current_tab + 1)
+            st.rerun()
+
+# Sidebar rendering
+render_quota_sidebar()
+st.sidebar.markdown("---")
+render_history_sidebar()
+
+# Main content with logo at top initially
+st.image("logo.png", width=200)
+
+# Navigation controls
+render_navigation_controls()
+
+# Custom tab container with swipe support
+st.markdown("""
+<div class="tab-container">
+    <div class="tab-content" style="transform: translateX({}%);">
+        <div class="tab-pane" id="tab-0">
+""".format(-st.session_state.current_tab * 33.333), unsafe_allow_html=True)
+
+# Tab 1: Coach
+if st.session_state.current_tab == 0:
+    render_analysis_tab(is_received=False)
+
+st.markdown('</div><div class="tab-pane" id="tab-1">', unsafe_allow_html=True)
+
+# Tab 2: Translate
+if st.session_state.current_tab == 1:
+    render_analysis_tab(is_received=True)
+
+st.markdown('</div><div class="tab-pane" id="tab-2">', unsafe_allow_html=True)
+
+# Tab 3: About (with logo moved to top)
+if st.session_state.current_tab == 2:
+    st.image("logo.png", width=200)
+    st.markdown("""### The Third Voice
+**AI communication coach** for better conversations.
+
+**Features:**
+- 📤 **Coach:** Improve outgoing messages
+- 📥 **Translate:** Understand incoming messages with deep analysis
+- 📜 **History:** Session tracking with save/load
+
+**Contexts:** General, Romantic, Coparenting, Workplace, Family, Friend
+
+**Privacy:** Local sessions only, manual save/load
+
+*Beta v0.9.1 • Contact: hello@thethirdvoice.ai*""")
+
+st.markdown('</div></div></div>', unsafe_allow_html=True)
+
+# Add JavaScript for swipe functionality
+st.markdown(swipe_js, unsafe_allow_html=True)
+
+st.markdown("---")
+st.markdown("*Feedback: hello@thethirdvoice.ai*")
