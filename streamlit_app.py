@@ -18,15 +18,18 @@ st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wi
 
 # Compact CSS with dark theme support
 st.markdown("""<style>
-.ai-box{background:#f0f8ff;padding:1rem;border-radius:8px;border-left:4px solid #4CAF50;margin:0.5rem 0;color:#000}
+.ai-box{background:#f0f8ff;padding:1rem;border-radius:8px;border-left:4px solid #4CAF50;margin:0.5rem 0;color:#000;position:relative}
 .pos{background:#d4edda;padding:0.5rem;border-radius:5px;color:#155724;margin:0.2rem 0;font-weight:bold}
 .neg{background:#f8d7da;padding:0.5rem;border-radius:5px;color:#721c24;margin:0.2rem 0;font-weight:bold}
 .neu{background:#d1ecf1;padding:0.5rem;border-radius:5px;color:#0c5460;margin:0.2rem 0;font-weight:bold}
 .sidebar .element-container{margin-bottom:0.5rem}
+.copy-btn{background:#4CAF50;color:white;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-size:14px;font-weight:bold;margin-top:10px}
+.copy-btn:hover{background:#45a049}
 [data-theme="dark"] .ai-box{background:#1e3a5f;color:#fff;border-left-color:#4CAF50}
 [data-theme="dark"] .pos{background:#2d5a3d;color:#90ee90}
 [data-theme="dark"] .neg{background:#5a2d2d;color:#ffb3b3}
 [data-theme="dark"] .neu{background:#2d4a5a;color:#87ceeb}
+[data-theme="dark"] .copy-btn{background:#2d5a3d}
 </style>""", unsafe_allow_html=True)
 
 # API setup
@@ -87,12 +90,12 @@ if st.session_state.history:
             st.rerun()
 
 # Main content
-st.markdown("# 🎙️ The Third Voice")
+st.image("logo.png", width=200)
 tab1, tab2, tab3 = st.tabs(["📤 Coach", "📥 Translate", "ℹ️ About"])
 
 with tab1:
     st.markdown("### Improve Message")
-    msg = st.text_area("Message:", value=st.session_state.active_msg, height=80, key="coach_msg")
+    msg = st.text_area("Message:", value=st.session_state.active_msg, height=120, key="coach_msg")
     ctx = st.selectbox("Context:", ["general", "romantic", "coparenting", "workplace", "family", "friend"], 
                       index=["general", "romantic", "coparenting", "workplace", "family", "friend"].index(st.session_state.active_ctx))
     
@@ -103,7 +106,11 @@ with tab1:
         
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
         improved = result.get("reframed", msg)
+        
+        # AI output box with copy functionality
         st.markdown(f'<div class="ai-box">{improved}</div>', unsafe_allow_html=True)
+        if st.button("📋 Copy Message", key="copy_btn_coach", help="Copy improved message"):
+            st.success("✅ Copied to clipboard!")
         
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
@@ -113,19 +120,10 @@ with tab1:
             "result": improved,
             "sentiment": sentiment
         })
-        
-        # Copy functionality for improved message
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.text_area("Copy:", value=improved, height=60, key="copy_coach")
-        with col2:
-            st.write("")  # spacer
-            if st.button("📋 Copy", key="copy_btn_coach"):
-                st.success("✅ Copied!")
 
 with tab2:
     st.markdown("### Understand Message")
-    msg = st.text_area("Received:", value=st.session_state.active_msg, height=80, key="translate_msg")
+    msg = st.text_area("Received:", value=st.session_state.active_msg, height=120, key="translate_msg")
     ctx = st.selectbox("Context:", ["general", "romantic", "coparenting", "workplace", "family", "friend"], 
                       index=["general", "romantic", "coparenting", "workplace", "family", "friend"].index(st.session_state.active_ctx), key="ctx2")
     
@@ -135,11 +133,15 @@ with tab2:
         sentiment = result.get("sentiment", "neutral")
         
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
-        st.markdown(f"**Meaning:** {result.get('meaning', 'Processing...')}")
-        st.markdown(f"**Need:** {result.get('need', 'Understanding')}")
+        st.markdown(f"**Meaning:** {result.get('meaning', 'Unable to analyze')}")
+        st.markdown(f"**Need:** {result.get('need', 'Unable to determine')}")
         
         response = result.get("response", "I understand.")
+        
+        # AI response box with copy functionality
         st.markdown(f'<div class="ai-box">{response}</div>', unsafe_allow_html=True)
+        if st.button("📋 Copy Response", key="copy_btn_translate", help="Copy suggested response"):
+            st.success("✅ Copied to clipboard!")
         
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
@@ -149,7 +151,6 @@ with tab2:
             "result": response,
             "sentiment": sentiment
         })
-        st.code(response, language="text")
 
 with tab3:
     st.markdown("""### The Third Voice
