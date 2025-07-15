@@ -776,4 +776,3 @@ with col2:
     st.markdown(f"**API Usage:** {current_usage}/{daily_limit}")
 with col3:
     st.markdown(f"**Session:** {len(st.session_state.history)} messages")
-.session_state.history)} messages")
