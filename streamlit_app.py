@@ -65,7 +65,7 @@ def clean_json_response(text):
 
 def get_quota_info():
     """Check current usage and provide quota information"""
-    daily_limit = 50
+    daily_limit = 1500  # Gemini 1.5 Flash free tier limit
     current_usage = st.session_state.count
     remaining = max(0, daily_limit - current_usage)
     return current_usage, remaining, daily_limit
@@ -75,7 +75,7 @@ def handle_quota_error(error_msg, ctx, msg, is_received=False):
     if "429" in str(error_msg) or "quota" in str(error_msg).lower():
         st.error("🚫 **API Quota Exceeded**")
         st.info("""
-        **Gemini API Free Tier Limit Reached (50 requests/day)**
+        **Gemini API Free Tier Limit Reached (1,500 requests/day)**
         
         **Solutions:**
         1. **Wait**: Reset at midnight PST
@@ -214,10 +214,10 @@ def load_conversation(idx):
 
 # Sidebar with enhanced quota tracking
 current_usage, remaining, daily_limit = get_quota_info()
-quota_color = "🟢" if remaining > 10 else "🟡" if remaining > 5 else "🔴"
+quota_color = "🟢" if remaining > 300 else "🟡" if remaining > 100 else "🔴"
 st.sidebar.markdown(f"**API Uses:** {quota_color} {current_usage}/{daily_limit}")
 st.sidebar.markdown(f"**Remaining:** {remaining}")
-if remaining <= 5:
+if remaining <= 100:
     st.sidebar.warning("⚠️ Low quota - consider offline mode")
 if remaining == 0:
     st.sidebar.error("🚫 Quota exhausted - using offline mode")
