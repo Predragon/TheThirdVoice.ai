@@ -31,11 +31,16 @@ def get_ai():
 
 def analyze(msg, ctx, recv=False):
     try:
-        prompt = f"""Context: {ctx}. {"Analyze received message, suggest response" if recv else "Analyze and reframe message"}: "{msg}"
-Return JSON: {{"sentiment": "positive/negative/neutral", "emotion": "main emotion", {"meaning": "what they mean", "need": "what they need", "response": "suggested response"" if recv else '"reframed": "better version"'}}}"""
+        if recv:
+            prompt = f'Context: {ctx}. Analyze received message, suggest response: "{msg}"\nReturn JSON: {{"sentiment": "positive/negative/neutral", "emotion": "main emotion", "meaning": "what they mean", "need": "what they need", "response": "suggested response"}}'
+        else:
+            prompt = f'Context: {ctx}. Analyze and reframe message: "{msg}"\nReturn JSON: {{"sentiment": "positive/negative/neutral", "emotion": "main emotion", "reframed": "better version"}}'
         return json.loads(get_ai().generate_content(prompt).text)
     except:
-        return {"sentiment": "neutral", "emotion": "mixed", ("meaning": "Processing...", "need": "Understanding", "response": "I understand." if recv else "reframed": f"I'd like to discuss: {msg}")}
+        if recv:
+            return {"sentiment": "neutral", "emotion": "mixed", "meaning": "Processing...", "need": "Understanding", "response": "I understand."}
+        else:
+            return {"sentiment": "neutral", "emotion": "mixed", "reframed": f"I'd like to discuss: {msg}"}
 
 st.markdown("# 🎙️ The Third Voice")
 st.sidebar.markdown(f"**Uses:** {st.session_state.count}/1500")
