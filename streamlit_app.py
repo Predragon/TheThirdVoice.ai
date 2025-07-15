@@ -16,13 +16,17 @@ if not st.session_state.token_validated:
 
 st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wide")
 
-# Compact CSS
+# Compact CSS with dark theme support
 st.markdown("""<style>
-.ai-box{background:#f0f8ff;padding:1rem;border-radius:8px;border-left:4px solid #4CAF50;margin:0.5rem 0}
-.pos{background:#d4edda;padding:0.5rem;border-radius:5px;color:#155724;margin:0.2rem 0}
-.neg{background:#f8d7da;padding:0.5rem;border-radius:5px;color:#721c24;margin:0.2rem 0}
-.neu{background:#d1ecf1;padding:0.5rem;border-radius:5px;color:#0c5460;margin:0.2rem 0}
+.ai-box{background:#f0f8ff;padding:1rem;border-radius:8px;border-left:4px solid #4CAF50;margin:0.5rem 0;color:#000}
+.pos{background:#d4edda;padding:0.5rem;border-radius:5px;color:#155724;margin:0.2rem 0;font-weight:bold}
+.neg{background:#f8d7da;padding:0.5rem;border-radius:5px;color:#721c24;margin:0.2rem 0;font-weight:bold}
+.neu{background:#d1ecf1;padding:0.5rem;border-radius:5px;color:#0c5460;margin:0.2rem 0;font-weight:bold}
 .sidebar .element-container{margin-bottom:0.5rem}
+[data-theme="dark"] .ai-box{background:#1e3a5f;color:#fff;border-left-color:#4CAF50}
+[data-theme="dark"] .pos{background:#2d5a3d;color:#90ee90}
+[data-theme="dark"] .neg{background:#5a2d2d;color:#ffb3b3}
+[data-theme="dark"] .neu{background:#2d4a5a;color:#87ceeb}
 </style>""", unsafe_allow_html=True)
 
 # API setup
@@ -38,14 +42,19 @@ def get_ai():
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def analyze(msg, ctx, is_received=False):
-    prompts = {
-        False: f'Context: {ctx}. Reframe message: "{msg}"\nJSON: {{"sentiment": "positive/negative/neutral", "emotion": "emotion", "reframed": "better version"}}',
-        True: f'Context: {ctx}. Analyze: "{msg}"\nJSON: {{"sentiment": "positive/negative/neutral", "emotion": "emotion", "meaning": "what they mean", "need": "what they need", "response": "suggested response"}}'
-    }
+    if is_received:
+        prompt = f'Context: {ctx}. Analyze received message: "{msg}"\nReturn JSON: {{"sentiment": "positive/negative/neutral", "emotion": "main emotion", "meaning": "what they mean", "need": "what they need", "response": "suggested response"}}'
+    else:
+        prompt = f'Context: {ctx}. Reframe message: "{msg}"\nReturn JSON: {{"sentiment": "positive/negative/neutral", "emotion": "main emotion", "reframed": "better version"}}'
+    
     try:
-        return json.loads(get_ai().generate_content(prompts[is_received]).text)
-    except:
-        return {"sentiment": "neutral", "emotion": "mixed", "reframed": f"I'd like to discuss: {msg}", "meaning": "Processing...", "need": "Understanding", "response": "I understand."}
+        result = get_ai().generate_content(prompt)
+        return json.loads(result.text)
+    except Exception as e:
+        if is_received:
+            return {"sentiment": "neutral", "emotion": "mixed", "meaning": "Processing...", "need": "Understanding", "response": "I understand."}
+        else:
+            return {"sentiment": "neutral", "emotion": "mixed", "reframed": f"I'd like to discuss: {msg}"}
 
 def load_conversation(idx):
     entry = st.session_state.history[idx]
