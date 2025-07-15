@@ -6,7 +6,7 @@ import re
 import time
 
 # Optimized session state init
-defaults = {'token_validated': False, 'api_key': st.secrets.get("GEMINI_API_KEY", ""), 'count': 0, 'history': [], 'active_msg': '', 'active_ctx': 'general', 'current_tab': 0}
+defaults = {'token_validated': False, 'api_key': st.secrets.get("GEMINI_API_KEY", ""), 'count': 0, 'history': [], 'active_msg': '', 'active_ctx': 'general'}
 for key, default in defaults.items():
     if key not in st.session_state: st.session_state[key] = default
 
@@ -22,7 +22,7 @@ if not st.session_state.token_validated:
 
 st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wide")
 
-# Enhanced CSS with swipe navigation and full screen tabs
+# Enhanced CSS with full width tabs
 @st.cache_data
 def get_css():
     return """<style>
@@ -42,7 +42,7 @@ def get_css():
 [data-theme="dark"] .need-box{background:#5a5a2d;color:#ffeb3b}
 [data-theme="dark"] .offline-box{background:#5a4d2d;color:#ffeb3b}
 
-/* Full screen tabs and swipe navigation */
+/* Full width tabs */
 .stTabs [data-baseweb="tab-list"] {
     gap: 0;
     width: 100%;
@@ -51,311 +51,16 @@ def get_css():
 
 .stTabs [data-baseweb="tab"] {
     flex: 1;
-    white-space: nowrap;
-    background-color: #f0f2f6;
-    border-radius: 8px 8px 0 0;
-    margin: 0 2px;
-    padding: 12px 16px;
-    transition: all 0.3s ease;
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-}
-
-.stTabs [data-baseweb="tab"]:hover {
-    background-color: #e6e9ef;
-    transform: translateY(-2px);
-}
-
-.stTabs [data-baseweb="tab"][aria-selected="true"] {
-    background-color: #ffffff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    border-bottom: 3px solid #4CAF50;
+    text-align: center;
 }
 
 .stTabs [data-baseweb="tab-panel"] {
     padding: 20px;
     min-height: 70vh;
-    background-color: #ffffff;
-    border-radius: 0 0 8px 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-/* Swipe navigation container */
-.tab-container {
-    position: relative;
-    width: 100%;
-    overflow: hidden;
-    touch-action: pan-x;
-}
-
-.tab-content {
-    display: flex;
-    transition: transform 0.3s ease;
-    width: 300%;
-}
-
-.tab-pane {
-    width: 33.333%;
-    padding: 20px;
-    min-height: 70vh;
-    box-sizing: border-box;
-}
-
-/* Swipe indicators */
-.swipe-indicator {
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 8px;
-    z-index: 10;
-}
-
-.swipe-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: #ccc;
-    transition: background-color 0.3s ease;
-}
-
-.swipe-dot.active {
-    background-color: #4CAF50;
-}
-
-/* Navigation buttons */
-.nav-buttons {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin: 20px 0;
-    padding: 0 20px;
-}
-
-.nav-btn {
-    background: #4CAF50;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 25px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.nav-btn:hover {
-    background: #45a049;
-    transform: translateY(-2px);
-}
-
-.nav-btn:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-    transform: none;
-}
-
-/* Mobile responsive */
-@media (max-width: 768px) {
-    .stTabs [data-baseweb="tab"] {
-        font-size: 14px;
-        padding: 10px 12px;
-    }
-    
-    .tab-pane {
-        padding: 15px;
-    }
-    
-    .nav-buttons {
-        padding: 0 10px;
-    }
-}
-
-/* Touch gestures hint */
-.touch-hint {
-    text-align: center;
-    color: #666;
-    font-size: 12px;
-    margin: 10px 0;
-    opacity: 0.7;
-}
-
-/* Dark theme support */
-[data-theme="dark"] .stTabs [data-baseweb="tab"] {
-    background-color: #2d3748;
-    color: #e2e8f0;
-}
-
-[data-theme="dark"] .stTabs [data-baseweb="tab"]:hover {
-    background-color: #4a5568;
-}
-
-[data-theme="dark"] .stTabs [data-baseweb="tab"][aria-selected="true"] {
-    background-color: #1a202c;
-    color: #ffffff;
-}
-
-[data-theme="dark"] .stTabs [data-baseweb="tab-panel"] {
-    background-color: #1a202c;
-    color: #e2e8f0;
 }
 </style>"""
 
 st.markdown(get_css(), unsafe_allow_html=True)
-
-# JavaScript for swipe functionality
-swipe_js = """
-<script>
-let startX = 0;
-let currentX = 0;
-let isDragging = false;
-let currentTab = 0;
-
-function initSwipeNavigation() {
-    const tabContainer = document.querySelector('.tab-container');
-    const tabContent = document.querySelector('.tab-content');
-    
-    if (!tabContainer || !tabContent) {
-        setTimeout(initSwipeNavigation, 100);
-        return;
-    }
-    
-    // Touch events
-    tabContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
-    tabContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
-    tabContainer.addEventListener('touchend', handleTouchEnd);
-    
-    // Mouse events for desktop
-    tabContainer.addEventListener('mousedown', handleMouseDown);
-    tabContainer.addEventListener('mousemove', handleMouseMove);
-    tabContainer.addEventListener('mouseup', handleMouseEnd);
-    tabContainer.addEventListener('mouseleave', handleMouseEnd);
-    
-    // Prevent default drag behavior
-    tabContainer.addEventListener('dragstart', (e) => e.preventDefault());
-}
-
-function handleTouchStart(e) {
-    startX = e.touches[0].clientX;
-    isDragging = true;
-}
-
-function handleTouchMove(e) {
-    if (!isDragging) return;
-    e.preventDefault();
-    currentX = e.touches[0].clientX;
-    const deltaX = currentX - startX;
-    updateTabPosition(deltaX);
-}
-
-function handleTouchEnd() {
-    if (!isDragging) return;
-    isDragging = false;
-    const deltaX = currentX - startX;
-    const threshold = 50;
-    
-    if (Math.abs(deltaX) > threshold) {
-        if (deltaX > 0 && currentTab > 0) {
-            changeTab(currentTab - 1);
-        } else if (deltaX < 0 && currentTab < 2) {
-            changeTab(currentTab + 1);
-        } else {
-            resetTabPosition();
-        }
-    } else {
-        resetTabPosition();
-    }
-}
-
-function handleMouseDown(e) {
-    startX = e.clientX;
-    isDragging = true;
-    e.preventDefault();
-}
-
-function handleMouseMove(e) {
-    if (!isDragging) return;
-    currentX = e.clientX;
-    const deltaX = currentX - startX;
-    updateTabPosition(deltaX);
-}
-
-function handleMouseEnd() {
-    if (!isDragging) return;
-    isDragging = false;
-    const deltaX = currentX - startX;
-    const threshold = 50;
-    
-    if (Math.abs(deltaX) > threshold) {
-        if (deltaX > 0 && currentTab > 0) {
-            changeTab(currentTab - 1);
-        } else if (deltaX < 0 && currentTab < 2) {
-            changeTab(currentTab + 1);
-        } else {
-            resetTabPosition();
-        }
-    } else {
-        resetTabPosition();
-    }
-}
-
-function updateTabPosition(deltaX) {
-    const tabContent = document.querySelector('.tab-content');
-    const baseTransform = -currentTab * 33.333;
-    const dragTransform = (deltaX / window.innerWidth) * 33.333;
-    tabContent.style.transform = `translateX(${baseTransform + dragTransform}%)`;
-}
-
-function resetTabPosition() {
-    const tabContent = document.querySelector('.tab-content');
-    tabContent.style.transform = `translateX(${-currentTab * 33.333}%)`;
-}
-
-function changeTab(newTab) {
-    currentTab = newTab;
-    const tabContent = document.querySelector('.tab-content');
-    tabContent.style.transform = `translateX(${-currentTab * 33.333}%)`;
-    
-    // Update indicators
-    updateIndicators();
-    
-    // Update Streamlit session state
-    window.parent.postMessage({
-        type: 'streamlit:setComponentValue',
-        key: 'current_tab',
-        value: currentTab
-    }, '*');
-}
-
-function updateIndicators() {
-    const dots = document.querySelectorAll('.swipe-dot');
-    dots.forEach((dot, index) => {
-        dot.classList.toggle('active', index === currentTab);
-    });
-}
-
-// Navigation button handlers
-function goToPrevTab() {
-    if (currentTab > 0) {
-        changeTab(currentTab - 1);
-    }
-}
-
-function goToNextTab() {
-    if (currentTab < 2) {
-        changeTab(currentTab + 1);
-    }
-}
-
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', initSwipeNavigation);
-setTimeout(initSwipeNavigation, 500);
-</script>
-"""
 
 # API setup
 if not st.session_state.api_key:
@@ -587,71 +292,22 @@ def render_analysis_tab(is_received=False):
             
             st.session_state.history.append(history_entry)
 
-def render_navigation_controls():
-    """Render navigation buttons and swipe indicators"""
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col1:
-        if st.button("⬅️ Previous", key="prev_btn", disabled=st.session_state.current_tab == 0):
-            st.session_state.current_tab = max(0, st.session_state.current_tab - 1)
-            st.rerun()
-    
-    with col2:
-        # Swipe indicators
-        st.markdown("""
-        <div style="text-align: center; margin: 10px 0;">
-            <div class="swipe-indicator">
-                <div class="swipe-dot {}"></div>
-                <div class="swipe-dot {}"></div>
-                <div class="swipe-dot {}"></div>
-            </div>
-        </div>
-        """.format(
-            "active" if st.session_state.current_tab == 0 else "",
-            "active" if st.session_state.current_tab == 1 else "",
-            "active" if st.session_state.current_tab == 2 else ""
-        ), unsafe_allow_html=True)
-        
-        st.markdown('<div class="touch-hint">👆 Swipe or drag to navigate between tabs</div>', 
-                   unsafe_allow_html=True)
-    
-    with col3:
-        if st.button("Next ➡️", key="next_btn", disabled=st.session_state.current_tab == 2):
-            st.session_state.current_tab = min(2, st.session_state.current_tab + 1)
-            st.rerun()
-
 # Sidebar rendering
 render_quota_sidebar()
 st.sidebar.markdown("---")
 render_history_sidebar()
 
-# Main content with logo at top initially
-st.image("logo.png", width=200)
+# Main content - removed logo from here
+tab1, tab2, tab3 = st.tabs(["📤 Coach", "📥 Translate", "ℹ️ About"])
 
-# Navigation controls
-render_navigation_controls()
-
-# Custom tab container with swipe support
-st.markdown("""
-<div class="tab-container">
-    <div class="tab-content" style="transform: translateX({}%);">
-        <div class="tab-pane" id="tab-0">
-""".format(-st.session_state.current_tab * 33.333), unsafe_allow_html=True)
-
-# Tab 1: Coach
-if st.session_state.current_tab == 0:
+with tab1:
     render_analysis_tab(is_received=False)
 
-st.markdown('</div><div class="tab-pane" id="tab-1">', unsafe_allow_html=True)
-
-# Tab 2: Translate
-if st.session_state.current_tab == 1:
+with tab2:
     render_analysis_tab(is_received=True)
 
-st.markdown('</div><div class="tab-pane" id="tab-2">', unsafe_allow_html=True)
-
-# Tab 3: About (with logo moved to top)
-if st.session_state.current_tab == 2:
+with tab3:
+    # Logo moved to top of About tab
     st.image("logo.png", width=200)
     st.markdown("""### The Third Voice
 **AI communication coach** for better conversations.
@@ -659,6 +315,7 @@ if st.session_state.current_tab == 2:
 **Features:**
 - 📤 **Coach:** Improve outgoing messages
 - 📥 **Translate:** Understand incoming messages with deep analysis
+
 - 📜 **History:** Session tracking with save/load
 
 **Contexts:** General, Romantic, Coparenting, Workplace, Family, Friend
@@ -666,11 +323,6 @@ if st.session_state.current_tab == 2:
 **Privacy:** Local sessions only, manual save/load
 
 *Beta v0.9.1 • Contact: hello@thethirdvoice.ai*""")
-
-st.markdown('</div></div></div>', unsafe_allow_html=True)
-
-# Add JavaScript for swipe functionality
-st.markdown(swipe_js, unsafe_allow_html=True)
 
 st.markdown("---")
 st.markdown("*Feedback: hello@thethirdvoice.ai*")
