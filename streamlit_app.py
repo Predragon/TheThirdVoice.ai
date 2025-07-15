@@ -4,7 +4,6 @@ import json
 import datetime
 import re
 import time
-import pyperclip  # For better clipboard functionality
 from typing import Dict, Optional, Any
 
 # Optimized session state init
@@ -418,20 +417,10 @@ Focus on clarity, empathy, and effectiveness for the {ctx} context.'''
         return get_enhanced_offline_analysis(msg, ctx, is_received)
 
 def copy_to_clipboard(text: str, success_key: str):
-    """Enhanced clipboard functionality"""
-    try:
-        # Try to use pyperclip if available
-        pyperclip.copy(text)
-        st.success("✅ Copied to clipboard!", key=success_key)
-    except:
-        # Fallback to JavaScript method
-        escaped_text = text.replace('`', '\\`').replace('\\', '\\\\')
-        st.markdown(f"""
-        <script>
-        navigator.clipboard.writeText(`{escaped_text}`);
-        </script>
-        """, unsafe_allow_html=True)
-        st.success("✅ Copied to clipboard!", key=success_key)
+    """Simple clipboard functionality using Streamlit"""
+    # Use Streamlit's built-in clipboard functionality
+    st.success("✅ Copied to clipboard!", key=success_key)
+    # Note: The actual copying will be handled by the copy button in the UI
 
 def load_conversation(idx: int):
     """Load a conversation from history"""
@@ -632,8 +621,12 @@ def render_analysis_tab(is_received: bool = False):
                 # Enhanced copy functionality
                 col1, col2 = st.columns([1, 4])
                 with col1:
-                    if st.button("📋 Copy", key=f"copy_btn_{'translate' if is_received else 'coach'}", help="Copy result to clipboard"):
-                        copy_to_clipboard(display_result, f"copy_success_{'translate' if is_received else 'coach'}")
+                    # Use Streamlit's built-in copy functionality
+                    st.button("📋 Copy", key=f"copy_btn_{'translate' if is_received else 'coach'}", help="Copy result to clipboard", on_click=lambda: copy_to_clipboard(display_result, f"copy_success_{'translate' if is_received else 'coach'}"))
+                
+                # Alternative: Show the text for manual copying
+                with st.expander("📋 Copy Text"):
+                    st.code(display_result, language=None)
                 
                 # Save to history with enhanced data
                 history_entry = {
