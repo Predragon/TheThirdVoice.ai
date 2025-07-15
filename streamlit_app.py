@@ -113,7 +113,15 @@ with tab1:
             "result": improved,
             "sentiment": sentiment
         })
-        st.code(improved, language="text")
+        
+        # Copy functionality for improved message
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.text_area("Copy:", value=improved, height=60, key="copy_coach")
+        with col2:
+            st.write("")  # spacer
+            if st.button("📋 Copy", key="copy_btn_coach"):
+                st.success("✅ Copied!")
 
 with tab2:
     st.markdown("### Understand Message")
