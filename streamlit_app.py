@@ -592,5 +592,4 @@ def render_navigation_controls():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col1:
-        if st.button("⬅️ Previous", key="prev_btn", 
-                    disabled=st.session_st
+        if st.button("⬅️ Previous", key="prev_btn", disabled=st.session_state.current_tab == 0)
