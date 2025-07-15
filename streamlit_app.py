@@ -37,7 +37,8 @@ st.markdown("""<style>
 [data-theme="dark"] .copy-btn{background:#2d5a3d}
 [data-theme="dark"] .meaning-box{background:#2d4a5a;color:#87ceeb;border-left-color:#17a2b8}
 [data-theme="dark"] .need-box{background:#5a5a2d;color:#ffeb3b;border-left-color:#ffc107}
-[data-theme="dark"] .error-box{background:#5a2d2d;color:#ffb3b3;border-left-color:#dc3545}
+.offline-box{background:#fff8dc;padding:1rem;border-radius:8px;border-left:4px solid #ff9800;margin:0.5rem 0;color:#000}
+[data-theme="dark"] .offline-box{background:#5a4d2d;color:#ffeb3b;border-left-color:#ff9800}
 </style>""", unsafe_allow_html=True)
 
 # API setup
@@ -62,7 +63,95 @@ def clean_json_response(text):
         return json_match.group(0)
     return text
 
+def get_quota_info():
+    """Check current usage and provide quota information"""
+    daily_limit = 50
+    current_usage = st.session_state.count
+    remaining = max(0, daily_limit - current_usage)
+    return current_usage, remaining, daily_limit
+
+def handle_quota_error(error_msg, ctx, msg, is_received=False):
+    """Handle API quota errors gracefully"""
+    if "429" in str(error_msg) or "quota" in str(error_msg).lower():
+        st.error("🚫 **API Quota Exceeded**")
+        st.info("""
+        **Gemini API Free Tier Limit Reached (50 requests/day)**
+        
+        **Solutions:**
+        1. **Wait**: Reset at midnight PST
+        2. **Upgrade**: Get paid Gemini API plan
+        3. **Use Offline Mode**: Basic analysis below
+        """)
+        
+        # Provide basic offline analysis
+        return get_offline_analysis(msg, ctx, is_received)
+    
+    return None
+
+def get_offline_analysis(msg, ctx, is_received=False):
+    """Provide basic analysis when API is unavailable"""
+    import string
+    
+    # Simple sentiment analysis
+    positive_words = ['good', 'great', 'happy', 'love', 'awesome', 'excellent', 'wonderful', 'amazing', 'perfect', 'thank']
+    negative_words = ['bad', 'hate', 'angry', 'sad', 'terrible', 'awful', 'horrible', 'upset', 'mad', 'disappointed']
+    
+    msg_lower = msg.lower()
+    pos_count = sum(1 for word in positive_words if word in msg_lower)
+    neg_count = sum(1 for word in negative_words if word in msg_lower)
+    
+    if pos_count > neg_count:
+        sentiment = "positive"
+    elif neg_count > pos_count:
+        sentiment = "negative"
+    else:
+        sentiment = "neutral"
+    
+    # Basic emotion detection
+    if any(word in msg_lower for word in ['angry', 'mad', 'furious']):
+        emotion = "angry"
+    elif any(word in msg_lower for word in ['sad', 'disappointed', 'hurt']):
+        emotion = "sad"
+    elif any(word in msg_lower for word in ['happy', 'excited', 'great']):
+        emotion = "happy"
+    elif any(word in msg_lower for word in ['worried', 'anxious', 'concerned']):
+        emotion = "anxious"
+    else:
+        emotion = "neutral"
+    
+    if is_received:
+        # Context-specific meaning analysis
+        context_insights = {
+            "romantic": "This appears to be a personal message that may involve feelings or relationship dynamics.",
+            "coparenting": "This message likely relates to child-related matters or parenting coordination.",
+            "workplace": "This seems to be a professional communication that may involve work tasks or relationships.",
+            "family": "This appears to be a family-related message that may involve personal or domestic matters.",
+            "friend": "This looks like a casual message between friends.",
+            "general": "This is a general communication."
+        }
+        
+        return {
+            "sentiment": sentiment,
+            "emotion": emotion,
+            "meaning": f"📴 **Offline Analysis:** {context_insights.get(ctx, 'This is a general communication.')} The tone appears {sentiment} with {emotion} undertones. For detailed analysis, try again when API quota resets.",
+            "need": "More context needed for detailed analysis",
+            "response": f"I understand you're sharing something important. Could you help me understand more about what you're looking for in this {ctx} situation?"
+        }
+    else:
+        return {
+            "sentiment": sentiment,
+            "emotion": emotion,
+            "reframed": f"📴 **Offline Mode:** Here's a basic reframe - Consider saying: 'I'd like to discuss something regarding our {ctx} situation: {msg[:80]}{'...' if len(msg) > 80 else ''}'"
+        }
+
 def analyze(msg, ctx, is_received=False, retry_count=0):
+    # Check quota before making request
+    current_usage, remaining, daily_limit = get_quota_info()
+    
+    if remaining <= 0:
+        st.warning(f"⚠️ Daily quota reached ({current_usage}/{daily_limit}). Using offline mode.")
+        return get_offline_analysis(msg, ctx, is_received)
+    
     if is_received:
         prompt = f'''Context: {ctx}. Analyze this received message: "{msg}"
 
@@ -102,36 +191,36 @@ Return only valid JSON, no explanations.'''
         return parsed_result
         
     except Exception as e:
+        # Handle quota errors specifically
+        quota_result = handle_quota_error(str(e), ctx, msg, is_received)
+        if quota_result:
+            return quota_result
+        
+        # Show error for debugging
         st.error(f"Analysis error: {str(e)}")
         
-        # Retry logic
-        if retry_count < 2:
+        # Retry logic for non-quota errors
+        if retry_count < 2 and "429" not in str(e):
             time.sleep(1)
             return analyze(msg, ctx, is_received, retry_count + 1)
         
-        # Fallback with more specific error handling
-        if is_received:
-            return {
-                "sentiment": "neutral", 
-                "emotion": "unclear", 
-                "meaning": f"Unable to fully analyze this message. It appears to be a {ctx} communication that may need further context to interpret properly.",
-                "need": "Clarification or more context may be helpful",
-                "response": "I'd like to better understand what you're trying to communicate. Could you help me understand your perspective?"
-            }
-        else:
-            return {
-                "sentiment": "neutral", 
-                "emotion": "mixed", 
-                "reframed": f"I'd like to discuss something important regarding {ctx}: {msg[:100]}{'...' if len(msg) > 100 else ''}"
-            }
+        # Fallback for other errors
+        return get_offline_analysis(msg, ctx, is_received)
 
 def load_conversation(idx):
     entry = st.session_state.history[idx]
     st.session_state.active_msg = entry['original']
     st.session_state.active_ctx = entry['context']
 
-# Sidebar
-st.sidebar.markdown(f"**Uses:** {st.session_state.count}/1500")
+# Sidebar with enhanced quota tracking
+current_usage, remaining, daily_limit = get_quota_info()
+quota_color = "🟢" if remaining > 10 else "🟡" if remaining > 5 else "🔴"
+st.sidebar.markdown(f"**API Uses:** {quota_color} {current_usage}/{daily_limit}")
+st.sidebar.markdown(f"**Remaining:** {remaining}")
+if remaining <= 5:
+    st.sidebar.warning("⚠️ Low quota - consider offline mode")
+if remaining == 0:
+    st.sidebar.error("🚫 Quota exhausted - using offline mode")
 st.sidebar.markdown("---")
 
 # Upload/Download in sidebar
@@ -205,7 +294,9 @@ with tab2:
             
             # Enhanced meaning display
             meaning = result.get('meaning', 'Unable to analyze')
-            if meaning != "Processing...":
+            if "📴 **Offline Analysis:**" in meaning:
+                st.markdown(f'<div class="offline-box">{meaning}</div>', unsafe_allow_html=True)
+            elif meaning != "Processing...":
                 st.markdown(f'<div class="meaning-box"><strong>💭 What they mean:</strong><br>{meaning}</div>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="error-box"><strong>⚠️ Analysis incomplete:</strong><br>The message analysis is still processing. Please try again.</div>', unsafe_allow_html=True)
