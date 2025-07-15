@@ -3,8 +3,12 @@ import google.generativeai as genai
 import json
 import datetime
 
-# --- Efficient Token System ---
+# --- Initialize Session State FIRST ---
 if 'token_validated' not in st.session_state:
+    st.session_state.token_validated = False
+
+# --- Efficient Token System ---
+if not st.session_state.token_validated:
     token = st.text_input("🔑 Beta Token:", type="password", placeholder="Enter your beta token")
     if token in ["ttv-beta-001", "ttv-beta-002", "ttv-beta-003"]:
         st.session_state.token_validated = True
@@ -12,7 +16,8 @@ if 'token_validated' not in st.session_state:
         st.rerun()
     elif token: 
         st.error("❌ Invalid token. Contact hello@thethirdvoice.ai")
-    if not st.session_state.token_validated: st.stop()
+    if not st.session_state.token_validated: 
+        st.stop()
 
 # --- Mobile-First Config ---
 st.set_page_config(page_title="The Third Voice", page_icon="🎙️")
@@ -25,7 +30,7 @@ st.markdown("""<style>
 .neu { background: #d1ecf1; padding: 0.5rem; border-radius: 5px; color: #0c5460; }
 </style>""", unsafe_allow_html=True)
 
-# --- Initialize ---
+# --- Initialize Other Session State Variables ---
 if 'api_key' not in st.session_state:
     st.session_state.api_key = st.secrets.get("GEMINI_API_KEY", "")
 if 'count' not in st.session_state:
