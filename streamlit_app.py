@@ -226,7 +226,7 @@ def render_analysis_tab(is_received=False):
                 meaning = result.get('meaning', 'Unable to analyze')
                 box_class = "offline-box" if "📴 **Offline Analysis:**" in meaning else "meaning-box"
                 st.markdown(f'<div class="{box_class}"><strong>💭 What they mean:</strong><br>{meaning}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="need-box"><strong>🎯 What they need:</strong><br>{result.get('need', 'Unable to determine')}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="need-box"><strong>🎯 What they need:</strong><br>{{result.get("need", "Unable to determine")}}</div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="ai-box"><strong>💬 Suggested response:</strong><br>{result.get("response", "I understand.")}</div>', unsafe_allow_html=True)
                 display_result = result.get("response")
             else:
