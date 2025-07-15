@@ -5,24 +5,13 @@ import datetime
 import re
 import time
 
-# Optimized session state init
-defaults = {'token_validated': False, 'api_key': st.secrets.get("GEMINI_API_KEY", ""), 'count': 0, 'history': [], 'active_msg': '', 'active_ctx': 'general'}
-for key, default in defaults.items():
-    if key not in st.session_state: st.session_state[key] = default
+# --- Helper Functions ---
 
-# Token validation
-if not st.session_state.token_validated:
-    token = st.text_input("🔑 Beta Token:", type="password")
-    if token in ["ttv-beta-001", "ttv-beta-002", "ttv-beta-003"]: 
-        st.session_state.token_validated = True
-        st.success("✅ Welcome!")
-        st.rerun()
-    elif token: st.error("❌ Invalid token")
-    if not st.session_state.token_validated: st.stop()
+def init_sess_state_defaults(defaults: dict):
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
 
-st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wide")
-
-# Enhanced CSS with full width tabs
 @st.cache_data
 def get_css():
     return """<style>
@@ -60,24 +49,6 @@ def get_css():
 }
 </style>"""
 
-st.markdown(get_css(), unsafe_allow_html=True)
-
-# API setup
-if not st.session_state.api_key:
-    st.warning("⚠️ API Key Required")
-    key = st.text_input("Gemini API Key:", type="password")
-    if st.button("Save") and key: 
-        st.session_state.api_key = key
-        st.success("✅ Saved!")
-        st.rerun()
-    st.stop()
-
-@st.cache_resource
-def get_ai():
-    genai.configure(api_key=st.session_state.api_key)
-    return genai.GenerativeModel('gemini-1.5-flash')
-
-# Cached quota info
 @st.cache_data(ttl=60)
 def get_quota_info():
     daily_limit = 1500
@@ -85,35 +56,34 @@ def get_quota_info():
     remaining = max(0, daily_limit - current_usage)
     return current_usage, remaining, daily_limit
 
-def clean_json_response(text):
-    text = re.sub(r'```json\s*|\s*```', '', text)
-    json_match = re.search(r'\{.*\}', text, re.DOTALL)
-    return json_match.group(0) if json_match else text
+@st.cache_resource
+def get_ai(api_key):
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 def get_offline_analysis(msg, ctx, is_received=False):
     positive_words = ['good', 'great', 'happy', 'love', 'awesome', 'excellent', 'wonderful', 'amazing', 'perfect', 'thank']
     negative_words = ['bad', 'hate', 'angry', 'sad', 'terrible', 'awful', 'horrible', 'upset', 'mad', 'disappointed']
-    
+
     msg_lower = msg.lower()
-    pos_count = sum(1 for word in positive_words if word in msg_lower)
-    neg_count = sum(1 for word in negative_words if word in msg_lower)
-    
+    pos_count = sum(word in msg_lower for word in positive_words)
+    neg_count = sum(word in msg_lower for word in negative_words)
+
     sentiment = "positive" if pos_count > neg_count else "negative" if neg_count > pos_count else "neutral"
-    
-    # Emotion detection
+
     emotion_map = {
         'angry': ['angry', 'mad', 'furious'],
         'sad': ['sad', 'disappointed', 'hurt'],
         'happy': ['happy', 'excited', 'great'],
         'anxious': ['worried', 'anxious', 'concerned']
     }
-    
+
     emotion = "neutral"
     for e, words in emotion_map.items():
         if any(word in msg_lower for word in words):
             emotion = e
             break
-    
+
     context_insights = {
         "romantic": "This appears to be a personal message that may involve feelings or relationship dynamics.",
         "coparenting": "This message likely relates to child-related matters or parenting coordination.",
@@ -122,66 +92,59 @@ def get_offline_analysis(msg, ctx, is_received=False):
         "friend": "This looks like a casual message between friends.",
         "general": "This is a general communication."
     }
-    
+
     if is_received:
         return {
             "sentiment": sentiment,
             "emotion": emotion,
-            "meaning": f"📴 **Offline Analysis:** {context_insights.get(ctx, 'This is a general communication.')} The tone appears {sentiment} with {emotion} undertones. For detailed analysis, try again when API quota resets.",
+            "meaning": (f"📴 **Offline Analysis:** {context_insights.get(ctx, 'This is a general communication.')} "
+                        f"The tone appears {sentiment} with {emotion} undertones. For detailed analysis, try again when API quota resets."),
             "need": "More context needed for detailed analysis",
-            "response": f"I understand you're sharing something important. Could you help me understand more about what you're looking for in this {ctx} situation?"
+            "response": (f"I understand you're sharing something important. Could you help me understand more about what you're looking "
+                         f"for in this {ctx} situation?")
         }
     else:
         return {
             "sentiment": sentiment,
             "emotion": emotion,
-            "reframed": f"📴 **Offline Mode:** Here's a basic reframe - Consider saying: 'I'd like to discuss something regarding our {ctx} situation: {msg[:80]}{'...' if len(msg) > 80 else ''}'"
+            "reframed": (f"📴 **Offline Mode:** Here's a basic reframe - Consider saying: 'I'd like to discuss something regarding "
+                         f"our {ctx} situation: {msg[:80]}{'...' if len(msg) > 80 else ''}'")
         }
 
-def analyze(msg, ctx, is_received=False, retry_count=0):
+def analyze(msg, ctx, is_received=False):
     current_usage, remaining, daily_limit = get_quota_info()
-    
     if remaining <= 0:
         st.warning(f"⚠️ Daily quota reached ({current_usage}/{daily_limit}). Using offline mode.")
         return get_offline_analysis(msg, ctx, is_received)
-    
-    # Unified prompt template
-    if is_received:
-        prompt = f'''Context: {ctx}. Analyze this received message: "{msg}"
-Return JSON with keys: sentiment, emotion, meaning, need, response'''
-    else:
-        prompt = f'''Context: {ctx}. Help reframe this message: "{msg}"
-Return JSON with keys: sentiment, emotion, reframed'''
-    
-    try:
-        result = get_ai().generate_content(prompt)
-        cleaned_text = clean_json_response(result.text)
-        parsed_result = json.loads(cleaned_text)
-        
-        # Validate required keys
-        required_keys = ['sentiment', 'emotion', 'meaning', 'need', 'response'] if is_received else ['sentiment', 'emotion', 'reframed']
-        
-        for key in required_keys:
-            if key not in parsed_result or not parsed_result[key]:
-                raise ValueError(f"Missing key: {key}")
-        
-        return parsed_result
-        
-    except Exception as e:
-        # Handle quota errors
-        if "429" in str(e) or "quota" in str(e).lower():
-            st.error("🚫 **API Quota Exceeded**")
-            st.info("**Solutions:** Wait (reset at midnight PST), Upgrade to paid plan, or Use offline mode")
-            return get_offline_analysis(msg, ctx, is_received)
-        
-        st.error(f"Analysis error: {str(e)}")
-        
-        # Retry logic
-        if retry_count < 2:
+
+    prompt = (f'Context: {ctx}. Analyze this received message: "{msg}" '
+              'Return JSON with keys: sentiment, emotion, meaning, need, response') if is_received else (
+              f'Context: {ctx}. Help reframe this message: "{msg}" '
+              'Return JSON with keys: sentiment, emotion, reframed')
+
+    ai_model = get_ai(st.session_state.api_key)
+    for attempt in range(3):
+        try:
+            result = ai_model.generate_content(prompt)
+            text = re.sub(r'``````', '', result.text)
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            cleaned_text = json_match.group(0) if json_match else text
+            parsed = json.loads(cleaned_text)
+
+            required = ['sentiment', 'emotion', 'meaning', 'need', 'response'] if is_received else ['sentiment', 'emotion', 'reframed']
+            missing_keys = [k for k in required if k not in parsed or not parsed[k]]
+            if missing_keys:
+                raise ValueError(f"Missing required keys: {missing_keys}")
+
+            return parsed
+        except Exception as e:
+            if "429" in str(e) or "quota" in str(e).lower():
+                st.error("🚫 **API Quota Exceeded**")
+                st.info("**Solutions:** Wait (reset at midnight PST), Upgrade to paid plan, or Use offline mode")
+                return get_offline_analysis(msg, ctx, is_received)
+            if attempt == 2:
+                return get_offline_analysis(msg, ctx, is_received)
             time.sleep(1)
-            return analyze(msg, ctx, is_received, retry_count + 1)
-        
-        return get_offline_analysis(msg, ctx, is_received)
 
 def load_conversation(idx):
     entry = st.session_state.history[idx]
@@ -199,105 +162,133 @@ def render_quota_sidebar():
         st.sidebar.error("🚫 Quota exhausted - using offline mode")
 
 def render_history_sidebar():
-    # Upload/Download
     uploaded = st.sidebar.file_uploader("📤 Load History", type="json")
     if uploaded:
         try:
-            st.session_state.history = json.load(uploaded)
-            st.sidebar.success("✅ Loaded!")
-        except:
-            st.sidebar.error("❌ Invalid file")
+            loaded_history = json.load(uploaded)
+            if isinstance(loaded_history, list):
+                st.session_state.history = loaded_history
+                st.sidebar.success("✅ Loaded!")
+            else:
+                raise ValueError("Loaded file is not a list")
+        except Exception:
+            st.sidebar.error("❌ Invalid file format")
 
     if st.session_state.history:
-        st.sidebar.download_button("💾 Save", 
-                                  json.dumps(st.session_state.history, indent=2), 
-                                  f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json")
-        
-        # Session history
+        filename = f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json"
+        st.sidebar.download_button("💾 Save", json.dumps(st.session_state.history, indent=2), filename)
+
         st.sidebar.markdown("📜 **This Session**")
-        for i, entry in enumerate(st.session_state.history[-5:]):
-            real_idx = len(st.session_state.history) - 5 + i
-            if st.sidebar.button(f"#{real_idx+1} {entry['context'][:3]} ({entry['time'][-5:]})", 
-                               key=f"load_{real_idx}"):
+        last_five = st.session_state.history[-5:]
+        start_idx = len(st.session_state.history) - len(last_five)
+        for i, entry in enumerate(last_five):
+            real_idx = start_idx + i
+            button_label = f"#{real_idx+1} {entry['context'][:3]} ({entry['time'][-5:]})"
+            if st.sidebar.button(button_label, key=f"load_{real_idx}"):
                 load_conversation(real_idx)
-                st.rerun()
+                st.experimental_rerun()
 
 def render_context_selector(key_suffix=""):
     contexts = ["general", "romantic", "coparenting", "workplace", "family", "friend"]
-    return st.selectbox("Context:", contexts, 
-                       index=contexts.index(st.session_state.active_ctx), 
-                       key=f"ctx{key_suffix}")
+    idx = contexts.index(st.session_state.active_ctx) if st.session_state.active_ctx in contexts else 0
+    return st.selectbox("Context:", contexts, index=idx, key=f"ctx{key_suffix}")
 
 def render_analysis_tab(is_received=False):
+    state = st.session_state
     tab_type = "Understand Message" if is_received else "Improve Message"
     st.markdown(f"### {tab_type}")
-    
-    msg = st.text_area("Received:" if is_received else "Message:", 
-                      value=st.session_state.active_msg, 
-                      height=120, 
-                      key="translate_msg" if is_received else "coach_msg")
-    
+
+    msg_key = "translate_msg" if is_received else "coach_msg"
+    msg = st.text_area("Received:" if is_received else "Message:", value=state.active_msg, height=120, key=msg_key)
     ctx = render_context_selector("2" if is_received else "")
-    
-    if st.button("🔍 Analyze" if is_received else "🚀 Analyze", type="primary") and msg.strip():
+
+    analyze_button_label = "🔍 Analyze" if is_received else "🚀 Analyze"
+    if st.button(analyze_button_label, type="primary") and msg.strip():
         with st.spinner(f"Analyzing {'the received' if is_received else 'your'} message..."):
-            st.session_state.count += 1
+            state.count += 1
             result = analyze(msg, ctx, is_received)
+
             sentiment = result.get("sentiment", "neutral")
-            
-            # Sentiment display
-            st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', 
-                       unsafe_allow_html=True)
-            
+            emotion = result.get("emotion", "mixed")
+            st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {emotion.title()}</div>', unsafe_allow_html=True)
+
             if is_received:
-                # Meaning analysis
                 meaning = result.get('meaning', 'Unable to analyze')
-                box_class = "offline-box" if "📴 **Offline Analysis:**" in meaning else "meaning-box"
-                st.markdown(f'<div class="{box_class}"><strong>💭 What they mean:</strong><br>{meaning}</div>', 
-                           unsafe_allow_html=True)
-                
-                # Need analysis
+                box_class = "offline-box" if meaning.startswith("📴 **Offline Analysis:**") else "meaning-box"
+                st.markdown(f'<div class="{box_class}"><strong>💭 What they mean:</strong><br>{meaning}</div>', unsafe_allow_html=True)
+
                 need = result.get('need', 'Unable to determine')
-                st.markdown(f'<div class="need-box"><strong>🎯 What they need:</strong><br>{need}</div>', 
-                           unsafe_allow_html=True)
-                
-                # Suggested response
+                st.markdown(f'<div class="need-box"><strong>🎯 What they need:</strong><br>{need}</div>', unsafe_allow_html=True)
+
                 response = result.get("response", "I understand.")
-                st.markdown(f'<div class="ai-box"><strong>💬 Suggested response:</strong><br>{response}</div>', 
-                           unsafe_allow_html=True)
-                
+                st.markdown(f'<div class="ai-box"><strong>💬 Suggested response:</strong><br>{response}</div>', unsafe_allow_html=True)
+
                 display_result = response
             else:
-                # Improved message
                 improved = result.get("reframed", msg)
                 st.markdown(f'<div class="ai-box">{improved}</div>', unsafe_allow_html=True)
                 display_result = improved
-            
-            if st.button("📋 Copy", key=f"copy_btn_{'translate' if is_received else 'coach'}", 
-                        help="Copy to clipboard"):
+
+            if st.button("📋 Copy", key=f"copy_btn_{'translate' if is_received else 'coach'}", help="Copy to clipboard"):
                 st.success("✅ Copied to clipboard!")
-            
-            # Save to history
+
             history_entry = {
                 "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
                 "type": "receive" if is_received else "send",
                 "context": ctx,
                 "original": msg,
                 "result": display_result,
-                "sentiment": sentiment
+                "sentiment": sentiment,
             }
-            
+
             if is_received:
                 history_entry.update({"meaning": result.get('meaning', ''), "need": result.get('need', '')})
-            
-            st.session_state.history.append(history_entry)
+
+            state.history.append(history_entry)
+
+# --- Main Script ---
+
+defaults = {
+    'token_validated': False,
+    'api_key': st.secrets.get("GEMINI_API_KEY", ""),
+    'count': 0,
+    'history': [],
+    'active_msg': '',
+    'active_ctx': 'general'
+}
+init_sess_state_defaults(defaults)
+
+# Token validation
+if not st.session_state.token_validated:
+    token = st.text_input("🔑 Beta Token:", type="password")
+    if token in ["ttv-beta-001", "ttv-beta-002", "ttv-beta-003"]:
+        st.session_state.token_validated = True
+        st.success("✅ Welcome!")
+        st.experimental_rerun()
+    elif token:
+        st.error("❌ Invalid token")
+    if not st.session_state.token_validated:
+        st.stop()
+
+st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wide")
+st.markdown(get_css(), unsafe_allow_html=True)
+
+# API key input / validation
+if not st.session_state.api_key:
+    st.warning("⚠️ API Key Required")
+    key = st.text_input("Gemini API Key:", type="password")
+    if st.button("Save") and key:
+        st.session_state.api_key = key
+        st.success("✅ Saved!")
+        st.experimental_rerun()
+    st.stop()
 
 # Sidebar rendering
 render_quota_sidebar()
 st.sidebar.markdown("---")
 render_history_sidebar()
 
-# Main content - removed logo from here
+# Main content with tabs
 tab1, tab2, tab3 = st.tabs(["📤 Coach", "📥 Translate", "ℹ️ About"])
 
 with tab1:
@@ -307,9 +298,9 @@ with tab2:
     render_analysis_tab(is_received=True)
 
 with tab3:
-    # Logo moved to top of About tab
     st.image("logo.png", width=200)
-    st.markdown("""### The Third Voice
+    st.markdown(
+        """### The Third Voice
 **AI communication coach** for better conversations.
 
 **Features:**
@@ -322,7 +313,8 @@ with tab3:
 
 **Privacy:** Local sessions only, manual save/load
 
-*Beta v0.9.1 • Contact: hello@thethirdvoice.ai*""")
+*Beta v0.9.1 • Contact: hello@thethirdvoice.ai*"""
+    )
 
 st.markdown("---")
 st.markdown("*Feedback: hello@thethirdvoice.ai*")
