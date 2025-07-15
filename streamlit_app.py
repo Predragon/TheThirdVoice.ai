@@ -425,9 +425,10 @@ def copy_to_clipboard(text: str, success_key: str):
         st.success("✅ Copied to clipboard!", key=success_key)
     except:
         # Fallback to JavaScript method
+        escaped_text = text.replace('`', '\\`').replace('\\', '\\\\')
         st.markdown(f"""
         <script>
-        navigator.clipboard.writeText(`{text.replace('`', '\\`')}`);
+        navigator.clipboard.writeText(`{escaped_text}`);
         </script>
         """, unsafe_allow_html=True)
         st.success("✅ Copied to clipboard!", key=success_key)
