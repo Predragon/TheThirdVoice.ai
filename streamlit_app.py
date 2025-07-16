@@ -44,19 +44,19 @@ def analyze(msg, ctx, is_received=False):
     }
     try:
         return json.loads(get_ai().generate_content(prompts[is_received]).text)
-    except:
-        return {"sentiment": "neutral", "emotion": "mixed", "reframed": f"I'd like to discuss: {msg}", "meaning": "Processing...", "need": "Understanding", "response": "I understand."}
+    except Exception as e:
+        st.error(f"⚠️ Error analyzing message: {e}")
+        return {"sentiment": "neutral", "emotion": "mixed", "reframed": msg, "meaning": "Unknown", "need": "Understanding", "response": "I understand."}
 
 def load_conversation(idx):
     entry = st.session_state.history[idx]
     st.session_state.active_msg = entry['original']
     st.session_state.active_ctx = entry['context']
 
-# Sidebar
+# Sidebar: Usage & Upload/Download
 st.sidebar.markdown(f"**Uses:** {st.session_state.count}/1500")
 st.sidebar.markdown("---")
 
-# Upload/Download in sidebar
 uploaded = st.sidebar.file_uploader("📤 Load History", type="json")
 if uploaded:
     try:
@@ -68,34 +68,25 @@ if uploaded:
 if st.session_state.history:
     st.sidebar.download_button("💾 Save", json.dumps(st.session_state.history, indent=2), f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json")
 
-# Session history in sidebar
-if st.session_state.history:
-    st.sidebar.markdown("📜 **This Session**")
-    for i, entry in enumerate(st.session_state.history[-5:]):
-        real_idx = len(st.session_state.history) - 5 + i
-        if st.sidebar.button(f"#{real_idx+1} {entry['context'][:3]} ({entry['time'][-5:]})", key=f"load_{real_idx}"):
-            load_conversation(real_idx)
-            st.rerun()
+# Define shared context list
+CONTEXTS = ["general", "romantic", "coparenting", "workplace", "family", "friend"]
 
-# Main content
-st.markdown("# 🎙️ The Third Voice")
-tab1, tab2, tab3 = st.tabs(["📤 Coach", "📥 Translate", "ℹ️ About"])
+# Main UI Tabs
+tab1, tab2, tab3, tab4 = st.tabs(["📤 Coach", "📥 Translate", "📜 History", "ℹ️ About"])
 
 with tab1:
     st.markdown("### Improve Message")
     msg = st.text_area("Message:", value=st.session_state.active_msg, height=80, key="coach_msg")
-    ctx = st.selectbox("Context:", ["general", "romantic", "coparenting", "workplace", "family", "friend"], 
-                      index=["general", "romantic", "coparenting", "workplace", "family", "friend"].index(st.session_state.active_ctx))
-    
+    ctx = st.selectbox("Context:", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx))
+
     if st.button("🚀 Analyze", type="primary") and msg.strip():
         st.session_state.count += 1
         result = analyze(msg, ctx)
         sentiment = result.get("sentiment", "neutral")
-        
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
         improved = result.get("reframed", msg)
         st.markdown(f'<div class="ai-box">{improved}</div>', unsafe_allow_html=True)
-        
+
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "send",
@@ -109,21 +100,18 @@ with tab1:
 with tab2:
     st.markdown("### Understand Message")
     msg = st.text_area("Received:", value=st.session_state.active_msg, height=80, key="translate_msg")
-    ctx = st.selectbox("Context:", ["general", "romantic", "coparenting", "workplace", "family", "friend"], 
-                      index=["general", "romantic", "coparenting", "workplace", "family", "friend"].index(st.session_state.active_ctx), key="ctx2")
-    
+    ctx = st.selectbox("Context:", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx), key="ctx2")
+
     if st.button("🔍 Analyze", type="primary") and msg.strip():
         st.session_state.count += 1
         result = analyze(msg, ctx, True)
         sentiment = result.get("sentiment", "neutral")
-        
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
         st.markdown(f"**Meaning:** {result.get('meaning', 'Processing...')}")
         st.markdown(f"**Need:** {result.get('need', 'Understanding')}")
-        
         response = result.get("response", "I understand.")
         st.markdown(f'<div class="ai-box">{response}</div>', unsafe_allow_html=True)
-        
+
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "receive",
@@ -135,6 +123,21 @@ with tab2:
         st.code(response, language="text")
 
 with tab3:
+    st.markdown("### 📜 Conversation History")
+    if st.session_state.history:
+        for i, entry in enumerate(reversed(st.session_state.history)):
+            st.markdown(f"#### Message #{len(st.session_state.history) - i}")
+            st.markdown(f"- 🕒 `{entry['time']}`")
+            st.markdown(f"- 📌 **Context:** `{entry['context']}`")
+            st.markdown(f"- 💬 **Type:** `{entry['type']}`")
+            st.markdown(f"- 😊 **Sentiment:** `{entry['sentiment']}`")
+            st.markdown(f"- 📝 **Original:** {entry['original']}")
+            st.markdown(f"<div class='ai-box'>{entry['result']}</div>", unsafe_allow_html=True)
+            st.markdown("---")
+    else:
+        st.info("No history yet.")
+
+with tab4:
     st.markdown("""### The Third Voice
 **AI communication coach** for better conversations.
 
