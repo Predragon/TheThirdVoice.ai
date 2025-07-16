@@ -66,7 +66,25 @@ def analyze(msg, ctx, is_received=False):
 st.sidebar.markdown("### 🗂️ Conversation Category")
 selected_context = st.sidebar.radio("Select context", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx))
 st.session_state.active_ctx = selected_context
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📜 History Options")
 
+# Upload History
+uploaded = st.sidebar.file_uploader("📤 Load from file", type="json")
+if uploaded:
+    try:
+        st.session_state.history = json.load(uploaded)
+        st.sidebar.success("✅ History loaded!")
+    except:
+        st.sidebar.error("❌ Invalid file format")
+
+# Save History
+if st.session_state.history:
+    st.sidebar.download_button(
+        "💾 Save history",
+        json.dumps(st.session_state.history, indent=2),
+        f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json"
+)
 # --- Tabs ---
 tab1, tab2, tab3, tab4 = st.tabs(["📤 Coach", "📥 Translate", "📜 History", "ℹ️ About"])
 
