@@ -1,5 +1,4 @@
 import streamlit as st
-import google.generativeai as genai
 import json
 import datetime
 
@@ -8,26 +7,14 @@ CONTEXTS = ["general", "romantic", "coparenting", "workplace", "family", "friend
 
 # --- Session Init ---
 for key, default in [
-    ('token_validated', False),
-    ('api_key', st.secrets.get("GEMINI_API_KEY", "")),
+    ('token_validated', True),  # bypassed token for mock testing
+    ('api_key', ''),            # empty if mocking AI
     ('count', 0),
     ('history', []),
     ('active_msg', ''),
     ('active_ctx', 'general')
 ]:
-    if key not in st.session_state:
-        st.session_state[key] = default
-
-# --- Token Gate ---
-if not st.session_state.token_validated:
-    token = st.text_input("🔑 Beta Token:", type="password")
-    if token in ["ttv-beta-001", "ttv-beta-002", "ttv-beta-003"]:
-        st.session_state.token_validated = True
-        st.success("✅ Welcome!")
-        st.rerun()
-    elif token:
-        st.error("❌ Invalid token")
-    st.stop()
+    if key not in st.session_state: st.session_state[key] = default
 
 # --- Page Setup ---
 st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wide")
@@ -39,47 +26,27 @@ st.markdown("""
 .neg{background:#f8d7da;padding:0.5rem;border-radius:5px;color:#721c24;margin:0.2rem 0}
 .neu{background:#d1ecf1;padding:0.5rem;border-radius:5px;color:#0c5460;margin:0.2rem 0}
 .sidebar .element-container{margin-bottom:0.5rem}
-/* Remove drag-and-drop look from file uploader */
-section[data-testid="stFileUploader"] div[role="button"] {
-    padding: 0.25rem 0.5rem !important;
-    border-radius: 5px;
-    font-size: 0.9rem;
-    border: 1px solid #ccc !important;
-}
-section[data-testid="stFileUploader"] label {
-    display: none !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
-# --- Gemini AI Setup ---
-@st.cache_resource
-def get_ai():
-    if not st.session_state.api_key:
-        raise RuntimeError("Missing Gemini API key.")
-    try:
-        genai.configure(api_key=st.session_state.api_key)
-        return genai.GenerativeModel('gemini-1.5-flash')
-    except Exception as e:
-        raise RuntimeError(f"Gemini configuration error: {e}")
-
-# --- AI Prompt Handler ---
-def analyze(msg, ctx, is_received=False):
-    prompts = {
-        False: f'Context: {ctx}. Reframe message: "{msg}"\nJSON: {{"sentiment": "positive/negative/neutral", "emotion": "emotion", "reframed": "better version"}}',
-        True: f'Context: {ctx}. Analyze: "{msg}"\nJSON: {{"sentiment": "positive/negative/neutral", "emotion": "emotion", "meaning": "what they mean", "need": "what they need", "response": "suggested response"}}'
-    }
-    try:
-        model = get_ai()
-        return json.loads(model.generate_content(prompts[is_received]).text)
-    except Exception as e:
-        st.error(f"⚠️ Could not connect to Gemini: {e}")
+# --- Mock AI Response ---
+def mock_analyze(msg, ctx, is_received=False):
+    if is_received:
         return {
-            "sentiment": "neutral", "emotion": "unknown",
-            "reframed": msg, "meaning": "Unclear", "need": "Connection issue", "response": "Please try again later."
+            "sentiment": "neutral",
+            "emotion": "confused",
+            "meaning": f"Mock understanding of: {msg}",
+            "need": "Clarity",
+            "response": f"Thanks for sharing that. Let's talk more about it."
+        }
+    else:
+        return {
+            "sentiment": "neutral",
+            "emotion": "calm",
+            "reframed": f"I'd like to express: {msg}"
         }
 
-# --- Sidebar: Context + History ---
+# --- Sidebar: Context & History Controls ---
 st.sidebar.markdown("### 🗂️ Conversation Category")
 selected_context = st.sidebar.radio("Select context", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx))
 st.session_state.active_ctx = selected_context
@@ -87,97 +54,90 @@ st.session_state.active_ctx = selected_context
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📜 Manage History")
 
-# --- Load History File ---
+# Load history
 uploaded = st.sidebar.file_uploader("📤 Load (.json)", type="json", label_visibility="collapsed")
-
 if uploaded:
     try:
         history_data = json.load(uploaded)
-
-        # Validate format (optional strict check)
         if isinstance(history_data, list) and all('original' in h and 'result' in h for h in history_data):
             st.session_state.history = history_data
             st.sidebar.success("✅ History loaded!")
         else:
-            st.sidebar.warning("⚠️ File loaded but format may be incorrect")
-
+            st.sidebar.warning("⚠️ Format issue: loaded but may be incomplete")
     except json.JSONDecodeError:
-        st.sidebar.error("❌ File is not valid JSON")
+        st.sidebar.error("❌ Not valid JSON")
     except Exception as e:
-        st.sidebar.error(f"❌ Error loading file: {e}")
+        st.sidebar.error(f"❌ Error loading: {e}")
 
 # Save history
 if st.session_state.history:
-    try:
-        history_json = json.dumps(st.session_state.history, indent=2)
-        st.sidebar.download_button(
-            "💾 Save (.json)",
-            history_json,
-            file_name=f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json",
-            use_container_width=True
-        )
-    except Exception as e:
-        st.sidebar.error(f"⚠️ Cannot save history: {e}")
+    st.sidebar.download_button(
+        "💾 Save (.json)",
+        json.dumps(st.session_state.history, indent=2),
+        file_name=f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json",
+        use_container_width=True
+    )
+
+# Clear history
+if st.session_state.history:
+    if st.sidebar.button("🧹 Clear History", use_container_width=True):
+        st.session_state.history.clear()
+        st.sidebar.info("History cleared.")
+
+# Count messages per selected context
+ctx_count = sum(1 for h in st.session_state.history if h['context'] == st.session_state.active_ctx)
+st.sidebar.caption(f"🗒️ {ctx_count} messages in '{st.session_state.active_ctx}'")
 
 # --- Tabs ---
 tab1, tab2, tab3, tab4 = st.tabs(["📤 Coach", "📥 Translate", "📜 History", "ℹ️ About"])
 
-# --- Coach Tab ---
+# --- Tab 1: Coach ---
 with tab1:
-    ctx = st.session_state.active_ctx
     st.markdown("### ✍️ Improve Message")
-    st.markdown(f"📂 **Context:** `{ctx}`")
     msg = st.text_area("Your message:", value=st.session_state.active_msg, height=80, key="coach_msg")
-
-    if st.button("🚀 Improve", type="primary") and msg.strip():
+    if st.button("🚀 Improve", type="primary"):
         st.session_state.count += 1
-        result = analyze(msg, ctx)
+        result = mock_analyze(msg, st.session_state.active_ctx)
         sentiment = result.get("sentiment", "neutral")
-        st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "neutral").title()}</div>', unsafe_allow_html=True)
         improved = result.get("reframed", msg)
         st.markdown(f'<div class="ai-box">{improved}</div>', unsafe_allow_html=True)
-
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "send",
-            "context": ctx,
+            "context": st.session_state.active_ctx,
             "original": msg,
             "result": improved,
             "sentiment": sentiment
         })
         st.code(improved, language="text")
 
-# --- Translate Tab ---
+# --- Tab 2: Translate ---
 with tab2:
-    ctx = st.session_state.active_ctx
     st.markdown("### 🧠 Understand Received Message")
-    st.markdown(f"📂 **Context:** `{ctx}`")
     msg = st.text_area("Received message:", value=st.session_state.active_msg, height=80, key="translate_msg")
-
-    if st.button("🔍 Analyze", type="primary") and msg.strip():
+    if st.button("🔍 Analyze", type="primary"):
         st.session_state.count += 1
-        result = analyze(msg, ctx, True)
+        result = mock_analyze(msg, st.session_state.active_ctx, True)
         sentiment = result.get("sentiment", "neutral")
-        st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "neutral").title()}</div>', unsafe_allow_html=True)
         st.markdown(f"**Meaning:** {result.get('meaning', '...')}")
         st.markdown(f"**Need:** {result.get('need', '...')}")
         st.markdown(f'<div class="ai-box">{result.get("response", "I understand.")}</div>', unsafe_allow_html=True)
-
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "receive",
-            "context": ctx,
+            "context": st.session_state.active_ctx,
             "original": msg,
             "result": result.get("response", msg),
             "sentiment": sentiment
         })
         st.code(result.get("response", msg), language="text")
 
-# --- History Tab ---
+# --- Tab 3: History ---
 with tab3:
     st.markdown("### 📜 Conversation History")
     filter_ctx = st.selectbox("Filter by context", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx), key="history_filter")
-
     filtered = [h for h in st.session_state.history if h['context'] == filter_ctx]
     if not filtered:
         st.info("No messages yet for this context.")
@@ -191,7 +151,7 @@ with tab3:
             st.markdown(f"<div class='ai-box'>{entry['result']}</div>", unsafe_allow_html=True)
             st.markdown("---")
 
-# --- About Tab ---
+# --- Tab 4: About ---
 with tab4:
     st.markdown("""### ℹ️ About The Third Voice
 **AI communication coach** for better conversations.
@@ -201,7 +161,7 @@ with tab4:
 - 📥 **Translate:** Understand incoming messages  
 - 📜 **History:** View & filter by conversation type
 
-**Contexts Supported:**  
+**Supported Contexts:**  
 General • Romantic • Coparenting • Workplace • Family • Friend
 
 🛡️ **Privacy:** Local only. No data is uploaded.  
