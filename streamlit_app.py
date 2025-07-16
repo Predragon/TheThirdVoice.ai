@@ -3,40 +3,51 @@ import google.generativeai as genai
 import json
 import datetime
 
-# Compact session state init
-for key, default in [('token_validated', False), ('api_key', st.secrets.get("GEMINI_API_KEY", "")), ('count', 0), ('history', []), ('active_msg', ''), ('active_ctx', 'general')]:
+# --- Constants ---
+CONTEXTS = ["general", "romantic", "coparenting", "workplace", "family", "friend"]
+
+# --- Session Init ---
+for key, default in [
+    ('token_validated', False),
+    ('api_key', st.secrets.get("GEMINI_API_KEY", "")),
+    ('count', 0),
+    ('history', []),
+    ('active_msg', ''),
+    ('active_ctx', 'general')
+]:
     if key not in st.session_state: st.session_state[key] = default
 
-# Token validation
+# --- Token Gate ---
 if not st.session_state.token_validated:
     token = st.text_input("🔑 Beta Token:", type="password")
-    if token in ["ttv-beta-001", "ttv-beta-002", "ttv-beta-003"]: st.session_state.token_validated = True; st.success("✅ Welcome!"); st.rerun()
-    elif token: st.error("❌ Invalid token")
-    if not st.session_state.token_validated: st.stop()
+    if token in ["ttv-beta-001", "ttv-beta-002", "ttv-beta-003"]:
+        st.session_state.token_validated = True
+        st.success("✅ Welcome!")
+        st.rerun()
+    elif token:
+        st.error("❌ Invalid token")
+    st.stop()
 
+# --- Page Setup ---
 st.set_page_config(page_title="The Third Voice", page_icon="🎙️", layout="wide")
 
-# Compact CSS
-st.markdown("""<style>
-.ai-box{background:#f0f8ff;padding:1rem;border-radius:8px;border-left:4px solid #4CAF50;margin:0.5rem 0}
+st.markdown("""
+<style>
+.ai-box {background:#f0f8ff;padding:1rem;border-radius:8px;border-left:4px solid #4CAF50;margin:0.5rem 0}
 .pos{background:#d4edda;padding:0.5rem;border-radius:5px;color:#155724;margin:0.2rem 0}
 .neg{background:#f8d7da;padding:0.5rem;border-radius:5px;color:#721c24;margin:0.2rem 0}
 .neu{background:#d1ecf1;padding:0.5rem;border-radius:5px;color:#0c5460;margin:0.2rem 0}
 .sidebar .element-container{margin-bottom:0.5rem}
-</style>""", unsafe_allow_html=True)
+</style>
+""", unsafe_allow_html=True)
 
-# API setup
-if not st.session_state.api_key:
-    st.warning("⚠️ API Key Required")
-    key = st.text_input("Gemini API Key:", type="password")
-    if st.button("Save") and key: st.session_state.api_key = key; st.success("✅ Saved!"); st.rerun()
-    st.stop()
-
+# --- Gemini AI Setup ---
 @st.cache_resource
 def get_ai():
     genai.configure(api_key=st.session_state.api_key)
     return genai.GenerativeModel('gemini-1.5-flash')
 
+# --- AI Prompt Handler ---
 def analyze(msg, ctx, is_received=False):
     prompts = {
         False: f'Context: {ctx}. Reframe message: "{msg}"\nJSON: {{"sentiment": "positive/negative/neutral", "emotion": "emotion", "reframed": "better version"}}',
@@ -45,18 +56,18 @@ def analyze(msg, ctx, is_received=False):
     try:
         return json.loads(get_ai().generate_content(prompts[is_received]).text)
     except Exception as e:
-        st.error(f"⚠️ Error analyzing message: {e}")
-        return {"sentiment": "neutral", "emotion": "mixed", "reframed": msg, "meaning": "Unknown", "need": "Understanding", "response": "I understand."}
+        st.error(f"⚠️ AI error: {e}")
+        return {
+            "sentiment": "neutral", "emotion": "mixed",
+            "reframed": msg, "meaning": "Unknown", "need": "Understanding", "response": "I understand."
+        }
 
-def load_conversation(idx):
-    entry = st.session_state.history[idx]
-    st.session_state.active_msg = entry['original']
-    st.session_state.active_ctx = entry['context']
+# --- Sidebar Context & History ---
+st.sidebar.header("🧠 Session Settings")
+selected_context = st.sidebar.selectbox("Conversation Context", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx))
+st.session_state.active_ctx = selected_context  # sync with main tabs
 
-# Sidebar: Usage & Upload/Download
-st.sidebar.markdown(f"**Uses:** {st.session_state.count}/1500")
-st.sidebar.markdown("---")
-
+st.sidebar.markdown(f"**Usage:** {st.session_state.count}/1500")
 uploaded = st.sidebar.file_uploader("📤 Load History", type="json")
 if uploaded:
     try:
@@ -66,22 +77,23 @@ if uploaded:
         st.sidebar.error("❌ Invalid file")
 
 if st.session_state.history:
-    st.sidebar.download_button("💾 Save", json.dumps(st.session_state.history, indent=2), f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json")
+    st.sidebar.download_button(
+        "💾 Save History",
+        json.dumps(st.session_state.history, indent=2),
+        f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json"
+    )
 
-# Define shared context list
-CONTEXTS = ["general", "romantic", "coparenting", "workplace", "family", "friend"]
-
-# Main UI Tabs
+# --- Tabs ---
 tab1, tab2, tab3, tab4 = st.tabs(["📤 Coach", "📥 Translate", "📜 History", "ℹ️ About"])
 
+# --- Coach Tab ---
 with tab1:
-    st.markdown("### Improve Message")
-    msg = st.text_area("Message:", value=st.session_state.active_msg, height=80, key="coach_msg")
-    ctx = st.selectbox("Context:", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx))
+    st.markdown("### ✍️ Improve Message")
+    msg = st.text_area("Your message:", value=st.session_state.active_msg, height=80, key="coach_msg")
 
-    if st.button("🚀 Analyze", type="primary") and msg.strip():
+    if st.button("🚀 Improve", type="primary") and msg.strip():
         st.session_state.count += 1
-        result = analyze(msg, ctx)
+        result = analyze(msg, st.session_state.active_ctx)
         sentiment = result.get("sentiment", "neutral")
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
         improved = result.get("reframed", msg)
@@ -90,67 +102,68 @@ with tab1:
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "send",
-            "context": ctx,
+            "context": st.session_state.active_ctx,
             "original": msg,
             "result": improved,
             "sentiment": sentiment
         })
         st.code(improved, language="text")
 
+# --- Translate Tab ---
 with tab2:
-    st.markdown("### Understand Message")
-    msg = st.text_area("Received:", value=st.session_state.active_msg, height=80, key="translate_msg")
-    ctx = st.selectbox("Context:", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx), key="ctx2")
+    st.markdown("### 🧠 Understand Received Message")
+    msg = st.text_area("Received message:", value=st.session_state.active_msg, height=80, key="translate_msg")
 
     if st.button("🔍 Analyze", type="primary") and msg.strip():
         st.session_state.count += 1
-        result = analyze(msg, ctx, True)
+        result = analyze(msg, st.session_state.active_ctx, True)
         sentiment = result.get("sentiment", "neutral")
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
-        st.markdown(f"**Meaning:** {result.get('meaning', 'Processing...')}")
-        st.markdown(f"**Need:** {result.get('need', 'Understanding')}")
-        response = result.get("response", "I understand.")
-        st.markdown(f'<div class="ai-box">{response}</div>', unsafe_allow_html=True)
+        st.markdown(f"**Meaning:** {result.get('meaning', '...')}")
+        st.markdown(f"**Need:** {result.get('need', '...')}")
+        st.markdown(f'<div class="ai-box">{result.get("response", "I understand.")}</div>', unsafe_allow_html=True)
 
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "receive",
-            "context": ctx,
+            "context": st.session_state.active_ctx,
             "original": msg,
-            "result": response,
+            "result": result.get("response", msg),
             "sentiment": sentiment
         })
-        st.code(response, language="text")
+        st.code(result.get("response", msg), language="text")
 
+# --- History Tab ---
 with tab3:
     st.markdown("### 📜 Conversation History")
-    if st.session_state.history:
-        for i, entry in enumerate(reversed(st.session_state.history)):
-            st.markdown(f"#### Message #{len(st.session_state.history) - i}")
+    filter_ctx = st.selectbox("Filter by context", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx), key="history_filter")
+
+    filtered = [h for h in st.session_state.history if h['context'] == filter_ctx]
+    if not filtered:
+        st.info("No messages yet for this context.")
+    else:
+        for i, entry in enumerate(reversed(filtered)):
+            st.markdown(f"#### Message #{len(filtered) - i}")
             st.markdown(f"- 🕒 `{entry['time']}`")
-            st.markdown(f"- 📌 **Context:** `{entry['context']}`")
             st.markdown(f"- 💬 **Type:** `{entry['type']}`")
             st.markdown(f"- 😊 **Sentiment:** `{entry['sentiment']}`")
-            st.markdown(f"- 📝 **Original:** {entry['original']}")
+            st.markdown(f"- ✉️ **Original:** {entry['original']}")
             st.markdown(f"<div class='ai-box'>{entry['result']}</div>", unsafe_allow_html=True)
             st.markdown("---")
-    else:
-        st.info("No history yet.")
 
+# --- About Tab ---
 with tab4:
-    st.markdown("""### The Third Voice
+    st.markdown("""### ℹ️ About The Third Voice
 **AI communication coach** for better conversations.
 
-**Features:**
+**Core Features:**
 - 📤 **Coach:** Improve outgoing messages
 - 📥 **Translate:** Understand incoming messages  
-- 📜 **History:** Session tracking with save/load
+- 📜 **History:** View & filter by conversation type
 
-**Contexts:** General, Romantic, Coparenting, Workplace, Family, Friend
+**Contexts Supported:**  
+General • Romantic • Coparenting • Workplace • Family • Friend
 
-**Privacy:** Local sessions only, manual save/load
-
-*Beta v0.9 • Contact: hello@thethirdvoice.ai*""")
-
-st.markdown("---")
-st.markdown("*Feedback: hello@thethirdvoice.ai*")
+🛡️ **Privacy:** Local only. No data is uploaded.  
+🧪 *Beta v0.9.1* — Feedback: [hello@thethirdvoice.ai](mailto:hello@thethirdvoice.ai)
+""")
