@@ -85,7 +85,19 @@ if not api_key_loaded:
                 st.warning("⚠️ Please enter a valid API key.")  
   
 # --- GeminiMessageCoach Class ---
-# (Code for GeminiMessageCoach not shown here to keep it concise — your original class remains unchanged)
+# Minimal class: Replace with your full logic if/when you have it!
+class GeminiMessageCoach:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        # You may want to initialize your Gemini model here
+
+    def analyze_message(self, message, history_context=None):
+        # Implement your real analysis here!
+        return {"sentiment": "neutral"}
+
+    def reframe_message(self, message, context, history_context=None):
+        # Implement your real reframing here!
+        return f"[{context.title()} Reframe] {message}"
 
 # --- App Session State ---  
 if 'usage_count' not in st.session_state:  
@@ -114,23 +126,48 @@ st.sidebar.markdown(f"**API Calls Used:** {st.session_state.usage_count}/1500 da
 st.sidebar.info("Welcome to The Third Voice beta! Analyze messages, save history locally, and share feedback at hello@thethirdvoice.ai.")  
   
 # --- Tabs ---
-# (Code for tab1 to tab4 remains unchanged)
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["Message Coach", "History", "About", "FAQ", "Saved Conversations"]
+)
+
+# --- Example content for tabs 1-4 (replace with your real tab logic as needed) ---
+with tab1:
+    st.write("Message Coach goes here!")
+
+with tab2:
+    st.write("History tab goes here!")
+
+with tab3:
+    st.write("About The Third Voice...")
+
+with tab4:
+    st.write("FAQ & Help")
 
 # --- Final block inside tab5 with fixed "with st" ---
 with tab5:
     st.markdown("### 📜 Conversation History")
-    uploaded_file = st.file_uploader("Upload Saved History (optional)", type="json", help="Upload your saved history file to continue a conversation. Max 1MB.", accept_multiple_files=False)
+    uploaded_file = st.file_uploader(
+        "Upload Saved History (optional)",
+        type="json",
+        help="Upload your saved history file to continue a conversation. Max 1MB.",
+        accept_multiple_files=False
+    )
     history_data = st.session_state.history
     if uploaded_file:
         try:
             history_data = json.load(uploaded_file)
             st.success("✅ History uploaded! Select a conversation below.")
-        except:
+        except Exception:
             st.error("❌ Invalid history file. Please upload a valid JSON file.")
 
     if history_data:
-        conversation_options = [f"[{entry['timestamp']}] {entry['context']}: {entry['original'][:50]}..." for entry in history_data]
-        selected_conversation = st.selectbox("Select a conversation to continue:", ["None"] + conversation_options)
+        conversation_options = [
+            f"[{entry['timestamp']}] {entry['context']}: {entry['original'][:50]}..."
+            for entry in history_data
+        ]
+        selected_conversation = st.selectbox(
+            "Select a conversation to continue:", ["None"] + conversation_options
+        )
         if selected_conversation != "None":
             selected_index = conversation_options.index(selected_conversation)
             selected_entry = history_data[selected_index]
@@ -138,14 +175,22 @@ with tab5:
             st.markdown(f"**Original:** {selected_entry['original']}")
             st.markdown(f"**Sentiment:** {selected_entry['sentiment'].title()}")
             st.markdown(f"**Reframed:** {selected_entry['reframed']}")
-            new_message = st.text_area("Reply to this conversation:", placeholder="Type your next message...", height=100)
-            context = st.selectbox("Context:", ["general", "romantic", "coparenting", "workplace"], index=["general", "romantic", "coparenting", "workplace"].index(selected_entry['context']) if selected_entry['context'] in ["general", "romantic", "coparenting", "workplace"] else 0)
+            new_message = st.text_area(
+                "Reply to this conversation:",
+                placeholder="Type your next message...",
+                height=100
+            )
+            context = st.selectbox(
+                "Context:",
+                ["general", "romantic", "coparenting", "workplace"],
+                index=["general", "romantic", "coparenting", "workplace"].index(selected_entry['context'])
+            )
             if st.button("⚡ Analyze & Reframe Reply", type="primary"):
                 if new_message.strip():
                     with st.spinner("Analyzing and reframing your reply..."):
                         st.session_state.usage_count += 1
-                        analysis_result = ai_coach.analyze_message(new_message, history_context)
-                        reframed = ai_coach.reframe_message(new_message, context, history_context)
+                        analysis_result = ai_coach.analyze_message(new_message, selected_entry['original'])
+                        reframed = ai_coach.reframe_message(new_message, context, selected_entry['original'])
                         st.markdown("#### ⚡ AI Response")
                         st.markdown('<div class="ai-response">', unsafe_allow_html=True)
                         st.markdown(reframed)
