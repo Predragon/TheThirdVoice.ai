@@ -15,7 +15,8 @@ for key, default in [
     ('active_msg', ''),
     ('active_ctx', 'general')
 ]:
-    if key not in st.session_state: st.session_state[key] = default
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # --- Token Gate ---
 if not st.session_state.token_validated:
@@ -62,30 +63,35 @@ def analyze(msg, ctx, is_received=False):
             "reframed": msg, "meaning": "Unknown", "need": "Understanding", "response": "I understand."
         }
 
-# --- Sidebar Context & History ---
+# --- Sidebar: Context + History ---
 st.sidebar.markdown("### 🗂️ Conversation Category")
 selected_context = st.sidebar.radio("Select context", CONTEXTS, index=CONTEXTS.index(st.session_state.active_ctx))
 st.session_state.active_ctx = selected_context
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📜 Manage History")
 
-# Load history (compact, no drag-drop)
-uploaded = st.sidebar.file_uploader("📤 Load (.json)", type="json", label_visibility="collapsed")
+# Load history (compact)
+uploaded = st.sidebar.file_uploader("📤 Load (.json)", type="json")
 if uploaded:
     try:
         st.session_state.history = json.load(uploaded)
-        st.sidebar.success("✅ Loaded!")
+        st.sidebar.success("✅ History loaded!")
     except:
         st.sidebar.error("❌ Invalid file")
 
-# Save history (only if there's something to save)
+# Save history (safe)
 if st.session_state.history:
-    st.sidebar.download_button(
-        "💾 Save (.json)",
-        json.dumps(st.session_state.history, indent=2),
-        file_name=f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json",
-        use_container_width=True
-    )
+    try:
+        history_json = json.dumps(st.session_state.history, indent=2)
+        st.sidebar.download_button(
+            "💾 Save (.json)",
+            history_json,
+            file_name=f"history_{datetime.datetime.now().strftime('%m%d_%H%M')}.json",
+            use_container_width=True
+        )
+    except Exception as e:
+        st.sidebar.error(f"⚠️ Cannot save history: {e}")
 
 # --- Tabs ---
 tab1, tab2, tab3, tab4 = st.tabs(["📤 Coach", "📥 Translate", "📜 History", "ℹ️ About"])
