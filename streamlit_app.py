@@ -87,14 +87,24 @@ st.session_state.active_ctx = selected_context
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📜 Manage History")
 
-# Load history
-uploaded = st.sidebar.file_uploader("📤 Load (.json)", type="json")
+# --- Load History File ---
+uploaded = st.sidebar.file_uploader("📤 Load (.json)", type="json", label_visibility="collapsed")
+
 if uploaded:
     try:
-        st.session_state.history = json.load(uploaded)
-        st.sidebar.success("✅ History loaded!")
-    except:
-        st.sidebar.error("❌ Invalid file")
+        history_data = json.load(uploaded)
+
+        # Validate format (optional strict check)
+        if isinstance(history_data, list) and all('original' in h and 'result' in h for h in history_data):
+            st.session_state.history = history_data
+            st.sidebar.success("✅ History loaded!")
+        else:
+            st.sidebar.warning("⚠️ File loaded but format may be incorrect")
+
+    except json.JSONDecodeError:
+        st.sidebar.error("❌ File is not valid JSON")
+    except Exception as e:
+        st.sidebar.error(f"❌ Error loading file: {e}")
 
 # Save history
 if st.session_state.history:
