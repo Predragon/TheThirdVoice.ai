@@ -39,14 +39,29 @@ st.markdown("""
 .neg{background:#f8d7da;padding:0.5rem;border-radius:5px;color:#721c24;margin:0.2rem 0}
 .neu{background:#d1ecf1;padding:0.5rem;border-radius:5px;color:#0c5460;margin:0.2rem 0}
 .sidebar .element-container{margin-bottom:0.5rem}
+/* Remove drag-and-drop look from file uploader */
+section[data-testid="stFileUploader"] div[role="button"] {
+    padding: 0.25rem 0.5rem !important;
+    border-radius: 5px;
+    font-size: 0.9rem;
+    border: 1px solid #ccc !important;
+}
+section[data-testid="stFileUploader"] label {
+    display: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # --- Gemini AI Setup ---
 @st.cache_resource
 def get_ai():
-    genai.configure(api_key=st.session_state.api_key)
-    return genai.GenerativeModel('gemini-1.5-flash')
+    if not st.session_state.api_key:
+        raise RuntimeError("Missing Gemini API key.")
+    try:
+        genai.configure(api_key=st.session_state.api_key)
+        return genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        raise RuntimeError(f"Gemini configuration error: {e}")
 
 # --- AI Prompt Handler ---
 def analyze(msg, ctx, is_received=False):
@@ -55,12 +70,13 @@ def analyze(msg, ctx, is_received=False):
         True: f'Context: {ctx}. Analyze: "{msg}"\nJSON: {{"sentiment": "positive/negative/neutral", "emotion": "emotion", "meaning": "what they mean", "need": "what they need", "response": "suggested response"}}'
     }
     try:
-        return json.loads(get_ai().generate_content(prompts[is_received]).text)
+        model = get_ai()
+        return json.loads(model.generate_content(prompts[is_received]).text)
     except Exception as e:
-        st.error(f"⚠️ AI error: {e}")
+        st.error(f"⚠️ Could not connect to Gemini: {e}")
         return {
-            "sentiment": "neutral", "emotion": "mixed",
-            "reframed": msg, "meaning": "Unknown", "need": "Understanding", "response": "I understand."
+            "sentiment": "neutral", "emotion": "unknown",
+            "reframed": msg, "meaning": "Unclear", "need": "Connection issue", "response": "Please try again later."
         }
 
 # --- Sidebar: Context + History ---
@@ -71,7 +87,7 @@ st.session_state.active_ctx = selected_context
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📜 Manage History")
 
-# Load history (compact)
+# Load history
 uploaded = st.sidebar.file_uploader("📤 Load (.json)", type="json")
 if uploaded:
     try:
@@ -80,7 +96,7 @@ if uploaded:
     except:
         st.sidebar.error("❌ Invalid file")
 
-# Save history (safe)
+# Save history
 if st.session_state.history:
     try:
         history_json = json.dumps(st.session_state.history, indent=2)
@@ -98,12 +114,14 @@ tab1, tab2, tab3, tab4 = st.tabs(["📤 Coach", "📥 Translate", "📜 History"
 
 # --- Coach Tab ---
 with tab1:
+    ctx = st.session_state.active_ctx
     st.markdown("### ✍️ Improve Message")
+    st.markdown(f"📂 **Context:** `{ctx}`")
     msg = st.text_area("Your message:", value=st.session_state.active_msg, height=80, key="coach_msg")
 
     if st.button("🚀 Improve", type="primary") and msg.strip():
         st.session_state.count += 1
-        result = analyze(msg, st.session_state.active_ctx)
+        result = analyze(msg, ctx)
         sentiment = result.get("sentiment", "neutral")
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
         improved = result.get("reframed", msg)
@@ -112,7 +130,7 @@ with tab1:
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "send",
-            "context": st.session_state.active_ctx,
+            "context": ctx,
             "original": msg,
             "result": improved,
             "sentiment": sentiment
@@ -121,12 +139,14 @@ with tab1:
 
 # --- Translate Tab ---
 with tab2:
+    ctx = st.session_state.active_ctx
     st.markdown("### 🧠 Understand Received Message")
+    st.markdown(f"📂 **Context:** `{ctx}`")
     msg = st.text_area("Received message:", value=st.session_state.active_msg, height=80, key="translate_msg")
 
     if st.button("🔍 Analyze", type="primary") and msg.strip():
         st.session_state.count += 1
-        result = analyze(msg, st.session_state.active_ctx, True)
+        result = analyze(msg, ctx, True)
         sentiment = result.get("sentiment", "neutral")
         st.markdown(f'<div class="{sentiment[:3]}">{sentiment.title()} • {result.get("emotion", "mixed").title()}</div>', unsafe_allow_html=True)
         st.markdown(f"**Meaning:** {result.get('meaning', '...')}")
@@ -136,7 +156,7 @@ with tab2:
         st.session_state.history.append({
             "time": datetime.datetime.now().strftime("%m/%d %H:%M"),
             "type": "receive",
-            "context": st.session_state.active_ctx,
+            "context": ctx,
             "original": msg,
             "result": result.get("response", msg),
             "sentiment": sentiment
@@ -175,5 +195,5 @@ with tab4:
 General • Romantic • Coparenting • Workplace • Family • Friend
 
 🛡️ **Privacy:** Local only. No data is uploaded.  
-🧪 *Beta v0.9.1* — Feedback: [hello@thethirdvoice.ai](mailto:hello@thethirdvoice.ai)
+🧪 *Beta v0.9.2* — Feedback: [hello@thethirdvoice.ai](mailto:hello@thethirdvoice.ai)
 """)
