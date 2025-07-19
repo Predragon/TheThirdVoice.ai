@@ -3,7 +3,7 @@ import json
 import datetime
 
 # --- Constants ---
-CONTEXTS = ["general", "romantic", "coparenting", "workplace", "family", "friend"]
+CONTEXTS = [ "romantic", "coparenting", "workplace", "family", "friend"]
 
 # --- Session Init ---
 for key, default in [
