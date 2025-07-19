@@ -1,14 +1,15 @@
+# 14
 import streamlit as st
 import json
 import datetime
 import requests
 
 # Constants
-CONTEXTS = ["romantic", "coparenting", "workplace", "family", "friend"]
+CONTEXTS = ["general", "romantic", "coparenting", "workplace", "family", "friend"]
 REQUIRE_TOKEN = False
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# CSS Styles (Cleaner, no red tones)
+# CSS Styles
 st.markdown("""
 <style>
 .contact-card {background:rgba(76,175,80,0.1);padding:0.8rem;border-radius:8px;border-left:4px solid #4CAF50;margin:0.5rem 0;cursor:pointer}
@@ -16,11 +17,13 @@ st.markdown("""
 .user-msg {background:rgba(33,150,243,0.1);padding:0.8rem;border-radius:8px;border-left:4px solid #2196F3;margin:0.3rem 0}
 .contact-msg {background:rgba(255,193,7,0.1);padding:0.8rem;border-radius:8px;border-left:4px solid #FFC107;margin:0.3rem 0}
 .pos {background:rgba(76,175,80,0.2);padding:0.5rem;border-radius:5px;margin:0.2rem 0}
+.neg {background:rgba(244,67,54,0.2);padding:0.5rem;border-radius:5px;margin:0.2rem 0}
 .neu {background:rgba(33,150,243,0.2);padding:0.5rem;border-radius:5px;margin:0.2rem 0}
 .journal-section {background:rgba(156,39,176,0.1);padding:1rem;border-radius:8px;margin:0.5rem 0}
 .main-actions {display:flex;gap:1rem;margin:1rem 0}
 .main-actions button {flex:1;padding:0.8rem;font-size:1.1rem}
 .feedback-section {background:rgba(0,150,136,0.1);padding:1rem;border-radius:8px;margin:1rem 0}
+.stats-card {background:rgba(63,81,181,0.1);padding:1rem;border-radius:8px;margin:0.5rem 0;text-align:center}
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,8 +32,8 @@ def initialize_session():
     defaults = {
         'token_validated': not REQUIRE_TOKEN,
         'api_key': st.secrets.get("OPENROUTER_API_KEY", ""),
-        'contacts': {context: {'context': context, 'history': []} for context in CONTEXTS},
-        'active_contact': CONTEXTS[0],
+        'contacts': {'General': {'context': 'general', 'history': []}},
+        'active_contact': 'General',
         'journal_entries': {},
         'feedback_data': {},
         'user_stats': {'total_messages': 0, 'coached_messages': 0, 'translated_messages': 0},
@@ -58,20 +61,21 @@ def validate_token():
 
 validate_token()
 
-# API Interaction with Rate Limit Fallback
+# API Interaction
 def get_ai_response(message, context, is_received=False):
     if not st.session_state.api_key:
         return {"error": "No API key"}
 
     prompts = {
-    "romantic": "You are an emotionally intelligent communication coach specializing in romantic relationships. We are responding to my partner. Strictly reframe this message with empathy, clarity, and intimacy, avoiding blame or narrative detours, and always suggest a positive next step to maintain connection. Do not generate stories or ask for additional context.",
-    "coparenting": "You offer emotionally safe responses for coparenting focused on the children's wellbeing.",
-    "workplace": "You translate workplace messages for professional tone and clear intent.",
-    "family": "You understand family dynamics and help rephrase for better family relationships.",
-    "friend": "You assist with friendship communication to strengthen bonds and resolve conflicts."
+        "general": "You are an emotionally intelligent communication coach. Help improve this message for clarity and empathy.",
+        "romantic": "You help reframe romantic messages with empathy and clarity while maintaining intimacy.",
+        "coparenting": "You offer emotionally safe responses for coparenting focused on the children's wellbeing.",
+        "workplace": "You translate workplace messages for professional tone and clear intent.",
+        "family": "You understand family dynamics and help rephrase for better family relationships.",
+        "friend": "You assist with friendship communication to strengthen bonds and resolve conflicts."
     }
 
-    system_prompt = f"{prompts.get(context, prompts['family'])} {'Analyze this received message and suggest how to respond.' if is_received else 'Improve this message before sending.'}"
+    system_prompt = f"{prompts.get(context, prompts['general'])} {'Analyze this received message and suggest how to respond.' if is_received else 'Improve this message before sending.'}"
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -105,16 +109,15 @@ def get_ai_response(message, context, is_received=False):
                 "improved": reply if not is_received else None,
                 "model": model_name
             }
-        except Exception as e:
+        except Exception:
             continue
 
-    # Fallback for rate limit or API issues
-    return {"error": "API limit reached. Please try again later or contact hello@thethirdvoice.ai for support."}
+    return {"error": "All models failed"}
 
-# Sidebar: Context Management
+# Sidebar: Contact Management
 def render_sidebar():
-    st.sidebar.markdown("### 👥 Your Contexts")
-    with st.sidebar.expander("➕ Add Custom Contact"):
+    st.sidebar.markdown("### 👥 Your Contacts")
+    with st.sidebar.expander("➕ Add Contact"):
         new_name = st.text_input("Name:")
         new_context = st.selectbox("Relationship:", CONTEXTS)
         if st.button("Add") and new_name and new_name not in st.session_state.contacts:
@@ -125,15 +128,15 @@ def render_sidebar():
 
     contact_names = list(st.session_state.contacts.keys())
     if contact_names:
-        selected = st.sidebar.radio("Select Context:", contact_names, index=contact_names.index(st.session_state.active_contact))
+        selected = st.sidebar.radio("Select Contact:", contact_names, index=contact_names.index(st.session_state.active_contact))
         st.session_state.active_contact = selected
 
     contact = st.session_state.contacts[st.session_state.active_contact]
     st.sidebar.markdown(f"**Context:** {contact['context']}\n**Messages:** {len(contact['history'])}")
 
-    if st.sidebar.button("🗑️ Delete Contact") and st.session_state.active_contact not in CONTEXTS:
+    if st.sidebar.button("🗑️ Delete Contact") and st.session_state.active_contact != "General":
         del st.session_state.contacts[st.session_state.active_contact]
-        st.session_state.active_contact = CONTEXTS[0]
+        st.session_state.active_contact = "General"
         st.rerun()
 
     st.sidebar.markdown("---\n### 💾 Data Management")
@@ -141,14 +144,18 @@ def render_sidebar():
     if uploaded:
         try:
             data = json.load(uploaded)
-            st.session_state.contacts = data.get('contacts', {context: {'context': context, 'history': []} for context in CONTEXTS})
+            # Clear existing data to avoid conflicts
+            st.session_state.contacts = data.get('contacts', {'General': {'context': 'general', 'history': []}})
             st.session_state.journal_entries = data.get('journal_entries', {})
             st.session_state.feedback_data = data.get('feedback_data', {})
+            st.session_state.user_stats = data.get('user_stats', {'total_messages': 0, 'coached_messages': 0, 'translated_messages': 0})
+            # Ensure active_contact is valid
             if st.session_state.active_contact not in st.session_state.contacts:
-                st.session_state.active_contact = CONTEXTS[0]
+                st.session_state.active_contact = "General"
             st.sidebar.success("✅ Data loaded!")
+            # Clear the file uploader to prevent re-processing
             st.session_state['file_uploader'] = None
-            st.rerun()
+            st.rerun()  # Force rerun to refresh UI with loaded data
         except Exception as e:
             st.sidebar.error(f"❌ Invalid file: {str(e)}")
 
@@ -157,6 +164,7 @@ def render_sidebar():
             'contacts': st.session_state.contacts,
             'journal_entries': st.session_state.journal_entries,
             'feedback_data': st.session_state.feedback_data,
+            'user_stats': st.session_state.user_stats,
             'saved_at': datetime.datetime.now().isoformat()
         }
         filename = f"third_voice_{datetime.datetime.now().strftime('%m%d_%H%M')}.json"
@@ -172,16 +180,16 @@ def render_main():
             st.image("logo.svg")
         except:
             st.markdown("# 🎙️ The Third Voice")
-        st.markdown("<div style='text-align: center'><i>Built for families</i></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center'><i>Created by Predrag Mirković</i></div>", unsafe_allow_html=True)
 
-    st.markdown(f"### 💬 Context: **{st.session_state.active_contact}**")
+    st.markdown(f"### 💬 Communicating with: **{st.session_state.active_contact}**")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("📤 Refine My Words", type="primary", use_container_width=True):
+        if st.button("📤 Coach My Message", type="primary", use_container_width=True):
             st.session_state.active_mode = "coach"
             st.rerun()
     with col2:
-        if st.button("📥 Decode Their Heart", type="primary", use_container_width=True):
+        if st.button("📥 Understand Their Message", type="primary", use_container_width=True):
             st.session_state.active_mode = "translate"
             st.rerun()
 
@@ -205,7 +213,7 @@ def render_message_input():
 
     col1, col2 = st.columns([3, 1])
     with col1:
-        process_btn = st.button(f"{'🚀 Refine My Words' if mode == 'coach' else '🔍 Decode Their Heart'}", type="secondary")
+        process_btn = st.button(f"{'🚀 Improve My Message' if mode == 'coach' else '🔍 Analyze & Respond'}", type="secondary")
     with col2:
         if st.button("Clear", type="secondary"):
             st.session_state[f"{mode}_input"] = ""
@@ -219,10 +227,10 @@ def render_message_input():
             if "error" not in result:
                 st.markdown("### 🎙️ The Third Voice says:")
                 if mode == "coach":
-                    st.markdown(f'<div class="ai-response"><strong>✨ Your refined message:</strong><br><br>{result["improved"]}<br><br><small><i>Generated by: {result["model"]}</i></small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="ai-response"><strong>✨ Your improved message:</strong><br><br>{result["improved"]}<br><br><small><i>Generated by: {result["model"]}</i></small></div>', unsafe_allow_html=True)
                     st.session_state.user_stats['coached_messages'] += 1
                 else:
-                    st.markdown(f'<div class="ai-response"><strong>🔍 What they truly mean:</strong><br>{result["response"]}<br><br><small><i>Generated by: {result["model"]}</i></small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="ai-response"><strong>🔍 What they really mean:</strong><br>{result["response"]}<br><br><small><i> Generated by: {result["model"]}</i></small></div>', unsafe_allow_html=True)
                     st.session_state.user_stats['translated_messages'] += 1
 
                 history_entry = {
@@ -256,7 +264,7 @@ render_message_input()
 
 # Tabs
 def render_tabs():
-    tab1, tab2, tab4 = st.tabs(["📜 History", "📘 Journal", "ℹ️ About"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📜 History", "📘 Journal", "📊 Stats", "ℹ️ About"])
 
     with tab1:
         st.markdown(f"### 📜 History with {st.session_state.active_contact}")
@@ -264,21 +272,21 @@ def render_tabs():
         if not contact['history']:
             st.info(f"No messages yet with {st.session_state.active_contact}. Use the buttons above to get started!")
         else:
-            filter_type = st.selectbox("Filter:", ["All", "Refined Messages", "Decoded Messages"])
+            filter_type = st.selectbox("Filter:", ["All", "Coached Messages", "Understood Messages"])
             filtered_history = contact['history']
-            if filter_type == "Refined Messages":
+            if filter_type == "Coached Messages":
                 filtered_history = [h for h in contact['history'] if h['type'] == 'coach']
-            elif filter_type == "Decoded Messages":
+            elif filter_type == "Understood Messages":
                 filtered_history = [h for h in contact['history'] if h['type'] == 'translate']
 
             for entry in reversed(filtered_history):
                 with st.expander(f"**{entry['time']}** • {entry['type'].title()} • {entry['original'][:50]}..."):
                     if entry['type'] == 'coach':
                         st.markdown(f'<div class="user-msg">📤 <strong>Original:</strong> {entry["original"]}</div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="ai-response">🎙️ <strong>Refined:</strong> {entry["result"]}<br><small><i>by {entry.get("model", "Unknown")}</i></small></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="ai-response">🎙️ <strong>Improved:</strong> {entry["result"]}<br><small><i>by {entry.get("model", "Unknown")}</i></small></div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f'<div class="contact-msg">📥 <strong>They said:</strong> {entry["original"]}</div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="ai-response">🎙️ <strong>Decoded:</strong> {entry["result"]}<br><small><i>by {entry.get("model", "Unknown")}</i></small></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="ai-response">🎙️ <strong>Analysis:</strong> {entry["result"]}<br><small><i>by {entry.get("model", "Unknown")}</i></small></div>', unsafe_allow_html=True)
                     if entry.get('id') in st.session_state.feedback_data:
                         feedback = st.session_state.feedback_data[entry['id']]
                         emoji = {"positive": "👍", "neutral": "👌", "negative": "👎"}
@@ -306,32 +314,61 @@ def render_tabs():
             st.markdown('<div class="journal-section">**📊 Patterns noticed?**</div>', unsafe_allow_html=True)
             journal['patterns'] = st.text_area("", value=journal['patterns'], key=f"patterns_{contact_key}", height=100, placeholder="Communication patterns you've observed...")
 
+    with tab3:
+        st.markdown("### 📊 Your Communication Stats")
+        col1, col2, col3 = st.columns(3)
+        for idx, (stat, label) in enumerate([
+            (st.session_state.user_stats["total_messages"], "Total Messages"),
+            (st.session_state.user_stats["coached_messages"], "Messages Coached"),
+            (st.session_state.user_stats["translated_messages"], "Messages Understood")
+        ]):
+            with [col1, col2, col3][idx]:
+                st.markdown(f'<div class="stats-card"><h3>{stat}</h3><p>{label}</p></div>', unsafe_allow_html=True)
+
+        st.markdown("### 👥 By Contact")
+        for name, contact in st.session_state.contacts.items():
+            if contact['history']:
+                coached = sum(1 for h in contact['history'] if h['type'] == 'coach')
+                translated = sum(1 for h in contact['history'] if h['type'] == 'translate')
+                st.markdown(f"**{name}:** {len(contact['history'])} total ({coached} coached, {translated} understood)")
+
+        if st.session_state.feedback_data:
+            st.markdown("### 📝 Feedback Summary")
+            feedback_counts = {
+                "positive": sum(1 for f in st.session_state.feedback_data.values() if f == "positive"),
+                "neutral": sum(1 for f in st.session_state.feedback_data.values() if f == "neutral"),
+                "negative": sum(1 for f in st.session_state.feedback_data.values() if f == "negative")
+            }
+            st.markdown(f"👍 Positive: {feedback_counts['positive']} | 👌 Neutral: {feedback_counts['neutral']} | 👎 Negative: {feedback_counts['negative']}")
+
     with tab4:
         st.markdown("""
         ### ℹ️ About The Third Voice
-        **The communication coach born from love and struggle.**
-        Founded by Predrag Mirković during his fight to reunite with his daughter Samantha, The Third Voice heals families through better communication. Visit us at [thethirdvoice.ai](https://thethirdvoice.ai) or email [hello@thethirdvoice.ai](mailto:hello@thethirdvoice.ai).
+        **The communication coach that's there when you need it most.**
+        Instead of repairing relationships after miscommunication damage, The Third Voice helps you communicate better in real-time.
         **How it works:**
-        1. **Select your context** - Personalized coaching for every relationship
-        2. **Refine your words** - Improve what you send
-        3. **Decode their heart** - Understand the meaning behind their messages
-        4. **Build better patterns** - Journal to strengthen family bonds
+        1. **Select your contact** - Each relationship gets personalized coaching
+        2. **Coach your messages** - Improve what you're about to send
+        3. **Understand their messages** - Decode the real meaning behind their words
+        4. **Build better patterns** - Journal and learn from each interaction
         **Key Features:**
-        - 🎯 Context-aware coaching for real-life relationships
+        - 🎯 Context-aware coaching for different relationships
+        - 📊 Track your communication progress
         - 📘 Personal journal for insights
         - 💾 Export/import your data
         - 🔒 Privacy-first design
-        **Privacy First:** All data stays on your device.
-        **Beta v1.0.0** — Built with ❤️ to reunite families.
+        **Privacy First:** All data stays on your device. Save and load your own files.
+        **Beta v1.0.0** — Built with ❤️ to heal relationships through better communication.
         *"When both people are talking from pain, someone needs to be the third voice."*
         ---
-        **Join the Movement:**
-        - 💻 Contribute on [GitHub](https://github.com/thethirdvoice)
-        - 📧 Suggest features or report bugs
-        - 🌟 Share your family stories
+        **Support & Community:**
+        - 💬 Join discussions at our community forum
+        - 📧 Report bugs or suggest features
+        - 🌟 Share your success stories
         **Technical Details:**
         - Powered by OpenRouter API
-        - Built with Streamlit on an Android phone
+        - Uses multiple AI models for reliability
+        - Built with Streamlit for easy deployment
         """)
 
 render_tabs()
