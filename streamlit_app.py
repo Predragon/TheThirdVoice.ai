@@ -257,6 +257,22 @@ def get_system_prompt(action, context):
 
 def call_api(message, action, context):
     try:
+        # Available models
+        models = [
+            "google/gemma-2-9b-it:free",
+            "meta-llama/llama-3.2-3b-instruct:free",
+            "microsoft/phi-3-mini-128k-instruct:free",
+            "mistralai/mistral-7b-instruct:free"  # Original model
+        ]
+        
+        # Select model based on context (you can customize this logic)
+        if context == "workplace":
+            model = models[1]  # Use Llama for workplace
+        elif context == "romantic":
+            model = models[0]  # Use Gemma for romantic
+        else:
+            model = models[3]  # Default to Mistral
+        
         response = requests.post(
             API_URL,
             headers={
@@ -265,7 +281,7 @@ def call_api(message, action, context):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "mistralai/mistral-7b-instruct:free",
+                "model": model,
                 "messages": [
                     {"role": "system", "content": get_system_prompt(action, context)},
                     {"role": "user", "content": f"Context: {context.capitalize()}\nMessage: {message}"}
@@ -509,8 +525,7 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #6b7280; font-size: 14px; padding: 20px 0;">
-        💡 <strong>Tip:</strong> Analyze their message first to understand their emotions, then improve your response!<br>
-        Made with ❤️ for better human connections
+        💡 <strong>Tip:</strong> Analyze their message first to understand their emotions, then improve your response.
     </div>
     """, unsafe_allow_html=True)
 
